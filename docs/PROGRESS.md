@@ -15,7 +15,7 @@
 - **改动位置**：`review.py`（`skipped` 与 `REVIEW_MANUAL`）、`service.py`（`record_manual_verdict`）、`web/runtime.py`（`can_search` / `search_block_reason`）、`web/app.py`（运行入口与人工裁决）、`web/runner.py`，前端 `components/PriceHistory.jsx`、`sections/Recommendations.jsx`、`sections/Settings.jsx`、`App.jsx`、`styles.css`，另有上一轮未入库的 `web/sharing.py`、`components/Folders.jsx`、`components/ItemSort.jsx`。
 - **验证**：111 项 pytest、Pyright 0 error、前端构建通过；本地浏览器核对两套皮肤 `--acc` 为 `#00aabb`、运行按钮底色 `rgb(0,170,187)` 配深色字、人工模式下待审列表无 AI 筛选项、价格弹窗 5 条观测加走势图。服务器已用 `git bundle` 同步到 `d66fbab` 并重建镜像，容器重建后 Caddy `8454` 返回 `200`，容器内静态产物含 `00aabb` 与「价格记录」，现有库数据不变。重建前数据库备份 `/srv/backups/xianyu-20261122-003552.db`。
 - **未验证**：没有用真实 SSO 会话在浏览器里打开线上页面，也没有触发真实抓取；成员侧人工审核的线上使用仍需同事实际跑一轮。
-- **阻塞**：`github.com:443` 从本机与服务器都不通（`api.github.com` 正常），本轮提交只在本地 `main` 与服务器工作副本，尚未推送 GitHub。
+- **GitHub**：`github.com:443` 期间中断过，恢复后已推送；当前 `main` 与 `origin/main` 同步（`94354d7`）。服务器工作副本用 `git bundle` 同步，未直接走 GitHub。
 - **既有能力**：逐条 AI 审核、提示词、搜索和 HTTPS 均已上线。`libatomic1` 构建补丁已进入 `Dockerfile`。
 
 ## 2026-11-22 人工审核与价格走势
@@ -24,12 +24,9 @@
 - **走势查看**：`PriceHistory.jsx` 从 `/api/items/{id}/prices` 或公开接口取观测，画线并列出逐条时间与价格；本地收藏由 `refresh_local_favorites` 每轮复检累积观测点，因此几天后打开就有曲线。
 - **验收**：种两条测试商品到本地冒烟库（4 个观测点跨 5 天）验证弹窗；线上容器用 `docker exec` 核对代码与产物，未触发真实采集。
 
-- 本轮正在添加站内价格记录与图表，公开历史单独保留公开期间观测。
-
 ## 下一步
 
-1. 网络恢复后把本地 `main`（3 个提交：功能、Dockerfile、进度）推到 GitHub。
-2. 把确实要分享的条件由所有者切为公开，用同事的 SSO 会话查看，并核对同组结果。
-3. 用成员自己的闲鱼账号（人工审核模式，不配 Key）完整跑一轮：搜索、待审队列、通过后出现在收藏、公开组行情可见。
-4. 继续阶段二的目标价提醒及实际告警，之后再做未收藏商品复查和按组的多商品走势。
-5. `docs/screenshots/` 里的皮肤截图仍是旧紫色重点色，改版后未重拍。
+1. 把确实要分享的条件由所有者切为公开，用同事的 SSO 会话查看，并核对同组结果。
+2. 用成员自己的闲鱼账号（人工审核模式，不配 Key）完整跑一轮：搜索、待审队列、通过后出现在收藏、公开组行情可见。
+3. 继续阶段二的目标价提醒及实际告警，之后再做未收藏商品复查和按组的多商品走势。
+4. `docs/screenshots/` 里的皮肤截图仍是旧紫色重点色，改版后未重拍。
