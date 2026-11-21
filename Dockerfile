@@ -22,6 +22,9 @@ ARG APT_MIRROR=mirrors.tencent.com
 RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || true \
     && sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list 2>/dev/null || true
 
+# Chromium 在 slim 基础镜像上缺 libatomic1(容器内启动浏览器时报缺库)
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1
+
 WORKDIR /app
 # 依赖层: 只依赖 pyproject。先放最小包骨架让 `-e .` 能装, 再装依赖 + Chromium。
 # 改 app 源码不会让这层失效(Chromium ~300MB 不必每次重下)。
