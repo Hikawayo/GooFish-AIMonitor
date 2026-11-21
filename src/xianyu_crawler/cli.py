@@ -35,11 +35,16 @@ def cmd_run(settings: Settings, args: argparse.Namespace) -> None:
 
 def cmd_serve(args: argparse.Namespace) -> None:
     """启动控制台: FastAPI + 进程内 APScheduler + 静态前端。"""
+    import logging
+
     import uvicorn
     from .web import scheduler, runtime
     from .web.app import app
     from .storage import repo
 
+    # 让每轮扫描的统计、抓取失败、登录失效都进容器日志(docker logs 可查)
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     Settings().data_dir.mkdir(parents=True, exist_ok=True)
     s = runtime.session()
     try:

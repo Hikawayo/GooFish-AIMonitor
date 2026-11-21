@@ -15,9 +15,18 @@ def test_scan_recommendations_filters_and_dedups(monkeypatch):
     monkeypatch.setattr(service, "_search", lambda ctx, w, st: items)
     w = Watch(name="w", keywords=["x"], price_max=2000)
     n = service.scan_recommendations(None, s, Settings(), [w])
-    assert n.created == 1 and n.scanned == 1 and repo.list_recommendations(s)[0].item_id == "a"
-    # 再扫不重复
+    assert n.created == 1 and n.scanned == 1 and n.raw == 2 and repo.list_recommendations(s)[0].item_id == "a"    # 再扫不重复
     assert service.scan_recommendations(None, s, Settings(), [w]).created == 0
+
+
+def test_scan_separates_search_hits_from_rule_filter(monkeypatch):
+    """搜索有结果、但全被价格规则挡掉: raw>0 而 scanned=0, 才能区分「没搜到」。"""
+    s = make_session("sqlite:///:memory:", create=True)
+    items = [Item(item_id=f"cheap-{i}", title="t", url="u", price=50) for i in range(3)]
+    monkeypatch.setattr(service, "_search", lambda ctx, w, st: items)
+    scan = service.scan_recommendations(None, s, Settings(), [Watch(name="w", keywords=["millsage"],
+                                                                   price_min=500)])
+    assert (scan.raw, scan.scanned, scan.created) == (3, 0, 0)
 
 
 def test_scan_recommendations_llm_review(monkeypatch):

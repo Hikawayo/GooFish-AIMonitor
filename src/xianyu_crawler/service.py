@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -23,6 +24,8 @@ from . import pipeline
 from .price_monitor import detect_drop
 from . import review
 from . import liveness as _liveness_mod
+
+logger = logging.getLogger(__name__)
 
 
 # --- 测试可 monkeypatch 的间接层(隔离真实浏览器) ---
@@ -102,9 +105,13 @@ def effective_settings(cfg: AppConfig) -> Settings:
 # --- 用例 ---
 @dataclass
 class ScanResult:
-    """一轮扫描的两个数字: 命中规则的条数, 以及真正新入队的推荐数。"""
+    """一轮扫描的三个数字: 搜索返回条数、命中规则条数、真正新入队的推荐数。
+
+    raw 与 scanned 分开, 才能回答「是没搜到东西, 还是被价格/地区规则挡掉了」。
+    """
     created: int = 0
     scanned: int = 0
+    raw: int = 0
 
 
 def scan_recommendations(ctx, session: Session, settings: Settings,
@@ -122,11 +129,15 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
         fresh: list[Item] = []
         seen: set[str] = set()
         known = {m.item_id: m for m in repo.watch_matches(session, w.id)} if w.id is not None else {}
+        watch_raw = watch_scanned = 0
         for item in _search(ctx, w, settings):
-            if item.item_id in seen or not matches(item, w):
+            if item.item_id in seen:
                 continue
             seen.add(item.item_id)
-            result.scanned += 1
+            watch_raw += 1
+            if not matches(item, w):
+                continue
+            watch_scanned += 1
             previous = known.get(item.item_id)
             if previous is not None:
                 repo.upsert_item_with_price(session, item, source="search")
@@ -140,6 +151,7 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
                                          or repo.is_collected(session, item.item_id)))):
                 continue
             fresh.append(item)
+        watch_created = 0
         # LLM 二次审核(有 requirement 才审; 无要求/失败放行)。
         # 未通过的也入库(带 rec_ok=False + 理由), 由前端筛选展示。
         verdicts = review.review_items(fresh, w.requirement, settings)
@@ -159,10 +171,15 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
             # AI 通过, 或人工审核模式下进队列 → 都算"本轮新推荐"
             queued = ok is True or (ok is None and not settings.review_enabled)
             if queued:
-                result.created += 1
+                watch_created += 1
                 repo.add_event(session, item.item_id, "new_recommendation",
                                {"title": item.title, "url": item.url, "price": item.price,
                                 "pic": item.pic_url, "watch": w.name})
+        result.raw += watch_raw
+        result.scanned += watch_scanned
+        result.created += watch_created
+        logger.info("扫描「%s」关键词=%s: 搜索 %d 条 → 命中规则 %d 条 → 新增 %d 条",
+                    w.name, " ".join(w.keywords), watch_raw, watch_scanned, watch_created)
     return result
 
 

@@ -413,7 +413,7 @@ export default function Settings({ status }) {
           <div className="last-run">
             上轮：{status.last.error
               ? `出错 — ${status.last.error}`
-              : `命中 ${status.last.scanned ?? 0} · 新推荐 ${status.last.recommendations ?? 0} · 降价 ${status.last.drops ?? 0} · 已通知 ${status.last.notified ?? 0}`}
+              : `搜索 ${status.last.raw ?? 0} · 命中 ${status.last.scanned ?? 0} · 新推荐 ${status.last.recommendations ?? 0} · 降价 ${status.last.drops ?? 0} · 已通知 ${status.last.notified ?? 0}`}
           </div>
         )}
       </Card>

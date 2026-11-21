@@ -101,7 +101,7 @@ def crawl(watch_name: str | None = None) -> dict:
                 # 只跑单个条件: 仅搜索该条件 + 通知(不刷收藏、不核活, 快)
                 scan = service.scan_recommendations(ctx, s, settings, watches)
                 notified = _notify(s, settings)
-                result = {"recommendations": scan.created, "scanned": scan.scanned,
+                result = {"recommendations": scan.created, "scanned": scan.scanned, "raw": scan.raw,
                           "scope": watch_name, "notified": notified, "at": _now_iso()}
             else:
                 # 先跑监控(刷新收藏列表入库, 含收藏夹死链), scan 才能据此过滤
@@ -110,7 +110,7 @@ def crawl(watch_name: str | None = None) -> dict:
                 # 给待审推荐核活, 标记卖出/删除的死链(避免重复打开)
                 dead = service.sweep_liveness(ctx, s, settings)
                 notified = _notify(s, settings)
-                result = {"recommendations": scan.created, "scanned": scan.scanned,
+                result = {"recommendations": scan.created, "scanned": scan.scanned, "raw": scan.raw,
                           "drops": drops, "dead": dead, "notified": notified, "at": _now_iso()}
     except Exception as e:  # noqa: BLE001 - 后台作业, 记录不抛
         logger.exception("抓取失败(scope=%s)", runtime.scope()[:8])

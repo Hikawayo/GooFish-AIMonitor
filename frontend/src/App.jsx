@@ -143,10 +143,13 @@ export default function App() {
       if (wasRunning.current && !st.running) {
         setRefreshKey((k) => k + 1)
         if (st.last?.error) showToast(`抓取出错：${st.last.error}`)
-        else if (st.last)
+        else if (st.last) {
+          const drops = st.last.drops ?? 0
           showToast(
-            `本轮完成：命中 ${st.last.scanned ?? 0} 条 · 新推荐 ${st.last.recommendations ?? 0} · 降价 ${st.last.drops ?? 0}`,
+            `本轮完成：搜索 ${st.last.raw ?? 0} 条 · 命中 ${st.last.scanned ?? 0} 条 · 新推荐 ${st.last.recommendations ?? 0} 条`
+            + (drops ? ` · 降价 ${drops}` : ''),
           )
+        }
       }
       wasRunning.current = st.running
     } catch {
