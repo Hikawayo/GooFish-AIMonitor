@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { Card, Badge, Spinner, EmptyState, Thumb, TimeMeta } from '../components/ui'
+import { Card, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
 import { yuan, fmtDate, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
 import ItemSort, { sortItems } from '../components/ItemSort'

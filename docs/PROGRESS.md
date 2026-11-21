@@ -14,12 +14,21 @@
 - **主题（本轮）**：只保留浅色（白 + `#00AABB`，新用户默认）与深色（黑白）两套预设；顶栏色板末尾的「＋」打开自定义主题，配置背景/文字/强调三个颜色、改色即时预览，保存后写 `localStorage`，只影响本人浏览器。颜色令牌由 `theme.js` 从这三个颜色推导（面板色、淡色、边框、强调色上的文字黑白自动选对比度高的那个），不再有 `data-s` 与五套皮肤；旧值自动映射到浅/深。
 - **体验审查（本轮）**：用本地双账号 SSO 环境（管理员 + 成员）实际跑了两条路径，修掉见下方「2026-11-22 体验审查」一节。
 - **字体（本轮）**：全局改用微软雅黑（`--font-ui`，macOS/Linux 回退 PingFang SC / Noto Sans SC / system-ui），去掉 Google Fonts 外链，等宽字体不再单独用于时间与计数。
+- **稳定性（本轮）**：修掉手机端点「收藏」整页白屏（`Drops.jsx` 漏 import `Seller`），并给根组件加了 ErrorBoundary，渲染出错时显示错误信息与刷新按钮。
 - **卡片层级（本轮）**：卖家从「卖家 xxx」的灰字改为首字母圆点 + 深色昵称并排最前，包邮徽标紧随，地区/成色保持弱色；顺带修掉包邮徽标与时间行的纵向错位。
-- **改动位置**：`storage/db.py`（engine 复用 + 建表加锁）、`storage/repo.py`（`get_config` 容忍并发插入），`frontend/src/theme.js`、`components/ThemeEditor.jsx`、`components/ui.jsx`（`Seller`）、`App.jsx`、`components/Folders.jsx`、`sections/Recommendations.jsx`、`sections/Drops.jsx`、`styles.css`、`index.html`，以及 `README.md`、`AGENTS.md` 的主题与字体说明。
+- **改动位置**：`storage/db.py`（engine 复用 + 建表加锁）、`storage/repo.py`（`get_config` 容忍并发插入），`frontend/src/theme.js`、`main.jsx`（ErrorBoundary）、`components/ThemeEditor.jsx`、`components/ui.jsx`（`Seller`）、`App.jsx`、`components/Folders.jsx`、`sections/Recommendations.jsx`、`sections/Drops.jsx`、`styles.css`、`index.html`，以及 `README.md`、`AGENTS.md` 的主题与字体说明。
 - **验证**：112 项 pytest、Pyright 0 error、前端构建通过；本地浏览器核对新账号默认浅色、深色切换、自定义三种颜色保存后刷新仍在、色板共三个；成员视角首屏直接是「公开行情」、文件夹带条数、收藏后按钮变「已收藏」、收藏页默认落在有收藏的组，全程无 500。卡片行内中心线实测一致（徽标/卖家/地区 508.5，时间行标签与数值差 0），390px 无横向溢出。服务器已用 `git bundle` 同步并重建镜像，容器重建后 Caddy `8454` 返回 `200`。重建前数据库备份 `/srv/backups/xianyu-20261122-003552.db`。
 - **未验证**：没有用真实 SSO 会话在浏览器里打开线上页面，也没有触发真实抓取；成员侧人工审核与主题的线上使用仍需实际点一遍。
 - **GitHub**：期间 `github.com:443` 中断过，恢复后已推送；服务器工作副本用 `git bundle` 同步，未直接走 GitHub。
 - **既有能力**：逐条 AI 审核、提示词、搜索和 HTTPS 均已上线。`libatomic1` 构建补丁已进入 `Dockerfile`。
+
+## 2026-11-22 手机点收藏白屏
+
+- **现象**：手机上点「收藏」后整页只剩白底，浏览器标签还在。
+- **原因**：`Drops.jsx` 用了新的 `<Seller>` 组件但没 import，渲染时抛 `ReferenceError: Seller is not defined`，React 卸载整棵树 → 白屏。用线上数据快照在 390px 复现，控制台一行就能定位；这不是手机特有问题，桌面打开收藏页同样白屏。
+- **修复**：补 import；并在 `main.jsx` 加根级 ErrorBoundary，渲染出错时显示「页面出错了 + 错误信息 + 刷新页面」，不再白屏。
+- **漏检原因**：上一轮改完只看了推荐页、设置页和公开卡片，没打开收藏页。已补一组全路由冒烟：4 条路由 × 桌面/手机 × 管理员/成员，要求 `#root` 有内容、无 `.crash`、无 `pageerror`。
+- **验证**：线上数据快照（14 条收藏）在 390px 正常渲染 14 张卡；12 组路由组合全部通过。
 
 ## 2026-11-22 卡片排版与字体
 
