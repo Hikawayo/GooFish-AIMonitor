@@ -116,7 +116,7 @@ SQLite 读回的 datetime 一律 **naive**。统一约定：库里存 **naive UT
 
 - 主题只有浅色、深色两套预设 + 用户自定义；颜色令牌由 `theme.js` 从「背景/文字/强调」三个颜色推导，以行内 CSS 变量挂在 `#app` 上（不再有 `data-s`）。收起靠 `#app[data-collapsed]`；主题/收起记忆在 `localStorage`，只影响本人浏览器。
 - Vite 构建 **压缩 CSS**(去引号/空格)——grep 验证产物时用 `data-collapsed=1` 而非 `data-collapsed='1'`。
-- 字体：Geist(拉丁/数字) + Geist Mono(数据) + Noto Sans SC(中文)，CDN 引入(`index.html`)。
+- 字体：全局 `Microsoft YaHei`（`--font-ui`，macOS/Linux 回退 PingFang SC / Noto Sans SC / system-ui），不再外链 Google Fonts；图标仍是 tabler 图标字体。
 
 ## 部署
 

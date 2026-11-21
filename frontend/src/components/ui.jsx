@@ -16,6 +16,17 @@ export function Badge({ tone = '', children }) {
   return <span className={`badge ${tone ? `badge-${tone}` : ''}`}>{children}</span>
 }
 
+// 卖家: 首字母圆点做视觉锚点, 昵称用正常文字色; aria-label 保留「卖家」语义
+export function Seller({ nick }) {
+  if (!nick) return null
+  return (
+    <span className="seller" aria-label={`卖家 ${nick}`} title={`卖家 ${nick}`}>
+      <span className="seller-av" aria-hidden="true">{nick[0]}</span>
+      <span className="seller-name">{nick}</span>
+    </span>
+  )
+}
+
 export function Spinner() {
   return (
     <div className="spinner-wrap">

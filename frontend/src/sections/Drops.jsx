@@ -70,10 +70,10 @@ export default function Drops({ refreshKey }) {
                   <Badge tone="drop">降 ¥{Math.round(it.reduce_price).toLocaleString('zh-CN')}</Badge>
                 )}
                 <div className="rec-meta">
+                  <Seller nick={it.seller_nick} />
+                  {it.free_shipping && <Badge>包邮</Badge>}
                   {it.location && <span>{it.location}</span>}
                   {it.condition && <span>{it.condition}</span>}
-                  {it.free_shipping && <Badge>包邮</Badge>}
-                  {it.seller_nick && <span>卖家 {it.seller_nick}</span>}
                 </div>
                 <TimeMeta
                   items={[

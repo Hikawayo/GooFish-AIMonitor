@@ -174,7 +174,7 @@ xianyu serve                           # 打开 http://127.0.0.1:8000
 
 ## 用到的技术
 
-后端 `Python 3.12` · `FastAPI` · `APScheduler` · `Playwright` · `SQLAlchemy` · `Pydantic`　｜　前端 `React 18` · `Vite` · `react-router` · Geist / Noto Sans SC　｜　部署 `Docker`
+后端 `Python 3.12` · `FastAPI` · `APScheduler` · `Playwright` · `SQLAlchemy` · `Pydantic`　｜　前端 `React 18` · `Vite` · `react-router` · 微软雅黑　｜　部署 `Docker`
 
 > 给 AI 协作者看的工程约定在 [`AGENTS.md`](AGENTS.md)。
 

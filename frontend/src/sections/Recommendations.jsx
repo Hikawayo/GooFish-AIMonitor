@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
-import { Card, Button, Badge, Spinner, EmptyState, Thumb, TimeMeta } from '../components/ui'
+import { Card, Button, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
 import { yuan, fmtDate, fmtDateTime, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
 import ItemSort, { sortItems } from '../components/ItemSort'
@@ -91,10 +91,10 @@ export default function Recommendations({ refreshKey, onToast }) {
         </a>
         <div className="rec-price-row"><div className="rec-price">{yuan(it.price)}</div><PriceHistory item={it} /></div>
         <div className="rec-meta">
-          {it.seller_nick && <span>卖家 {it.seller_nick}</span>}
+          <Seller nick={it.seller_nick} />
+          {it.free_shipping && <Badge>包邮</Badge>}
           {it.location && <span>{it.location}</span>}
           {it.condition && <span>{it.condition}</span>}
-          {it.free_shipping && <Badge>包邮</Badge>}
         </div>
         {(it.browse_count != null || it.want_count != null || it.collect_count != null) && (
           <div className="rec-stats">
@@ -230,7 +230,7 @@ export default function Recommendations({ refreshKey, onToast }) {
                   <div className="rec-price-row"><div className="rec-price">{yuan(item.price)}</div>
                     <PriceHistory item={item} folder={selected.id} />
                   </div>
-                  {item.seller_nick && <div className="rec-meta">卖家 {item.seller_nick}</div>}
+                  {item.seller_nick && <div className="rec-meta"><Seller nick={item.seller_nick} /></div>}
                   <TimeMeta items={[['上架', ago(item.publish_time)], ['观测', fmtDateTime(item.observed_at)]]} />
                   <Button
                     disabled={busy[`shared:${item.item_id}`] || savedShared[item.item_id]}
