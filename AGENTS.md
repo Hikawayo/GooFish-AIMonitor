@@ -88,9 +88,9 @@ src/xianyu_crawler/
     dto.py         Pydantic DTO + row↔DTO 映射; _iso() 把 naive UTC 标成 +00:00
     runtime.py     进程内单例 session
 frontend/src/
-  App.jsx          全屏 grid 外壳(顶栏/侧栏/主区/右栏) + 5 皮肤 + 收起 + 轮询
+  App.jsx          全屏 grid 外壳(顶栏/侧栏/主区/右栏) + 主题/收起 + 轮询
   sections/        Recommendations / Drops(收藏) / Watches / Settings
-  components/ui.jsx, api.js, util.js, styles.css(设计系统 + 5 皮肤令牌)
+  components/ui.jsx, api.js, util.js, styles.css(设计系统 + 主题令牌), theme.js(浅/深/自定义配色)
 ```
 
 ## 数据模型要点
@@ -114,8 +114,8 @@ SQLite 读回的 datetime 一律 **naive**。统一约定：库里存 **naive UT
 
 ## 前端约定
 
-- 5 皮肤靠 `#app[data-s=...]` 切 CSS 变量，收起靠 `#app[data-collapsed]`；皮肤/收起记忆在 `localStorage`。
-- Vite 构建 **压缩 CSS**(去引号/空格)——grep 验证产物时用 `data-s=linear` 而非 `data-s='linear'`。
+- 主题只有浅色、深色两套预设 + 用户自定义；颜色令牌由 `theme.js` 从「背景/文字/强调」三个颜色推导，以行内 CSS 变量挂在 `#app` 上（不再有 `data-s`）。收起靠 `#app[data-collapsed]`；主题/收起记忆在 `localStorage`，只影响本人浏览器。
+- Vite 构建 **压缩 CSS**(去引号/空格)——grep 验证产物时用 `data-collapsed=1` 而非 `data-collapsed='1'`。
 - 字体：Geist(拉丁/数字) + Geist Mono(数据) + Noto Sans SC(中文)，CDN 引入(`index.html`)。
 
 ## 部署

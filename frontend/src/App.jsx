@@ -6,15 +6,8 @@ import Recommendations from './sections/Recommendations'
 import Drops from './sections/Drops'
 import Watches from './sections/Watches'
 import Settings from './sections/Settings'
-
-// 5 套大厂皮肤(色板用于顶栏选择器: bg + accent 双色圆点)
-const SKINS = [
-  { k: 'linear', name: 'Linear', bg: '#08090a', acc: '#00aabb' },
-  { k: 'vercel', name: 'Vercel', bg: '#000000', acc: '#ededed' },
-  { k: 'stripe', name: 'Stripe', bg: '#f6f9fc', acc: '#00aabb' },
-  { k: 'supabase', name: 'Supabase', bg: '#1d1d1d', acc: '#3ecf8e' },
-  { k: 'apple', name: 'Apple', bg: '#f5f5f7', acc: '#0071e3' },
-]
+import ThemeEditor from './components/ThemeEditor'
+import { PRESETS, loadTheme, paletteOf, saveTheme, themeVars } from './theme'
 
 const NAV = [
   ['/recommendations', '推荐', 'ti-sparkles', 'pending'],
@@ -92,7 +85,8 @@ function EventRow({ e }) {
 
 export default function App() {
   const { pathname } = useLocation()
-  const [skin, setSkin] = useState(() => localStorage.getItem('xy-skin') || 'linear')
+  const [theme, setTheme] = useState(loadTheme)
+  const [themeOpen, setThemeOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('xy-side') === '1')
   const [status, setStatus] = useState(null)
   const [stats, setStats] = useState(ZERO)
@@ -106,9 +100,18 @@ export default function App() {
   const [runMenu, setRunMenu] = useState(false)
   const wasRunning = useRef(false)
 
-  const changeSkin = (k) => {
-    setSkin(k)
-    localStorage.setItem('xy-skin', k)
+  const palette = paletteOf(theme.key, theme.custom)
+
+  const chooseTheme = (key) => {
+    const next = { key, custom: theme.custom }
+    setTheme(next)
+    saveTheme(next.key, next.custom)
+  }
+  const saveCustomTheme = (colors) => {
+    const custom = { bg: colors.bg, fg: colors.fg, acc: colors.acc }
+    setTheme({ key: 'custom', custom })
+    saveTheme('custom', custom)
+    setThemeOpen(false)
   }
   const toggleSide = () => {
     setCollapsed((c) => {
@@ -181,7 +184,7 @@ export default function App() {
     events === null ? null : activeTab.types ? events.filter((e) => activeTab.types.includes(e.type)) : events
 
   return (
-    <div id="app" data-s={skin} data-collapsed={collapsed ? '1' : '0'} data-rail={railOpen ? '1' : '0'}>
+    <div id="app" style={themeVars(palette)} data-collapsed={collapsed ? '1' : '0'} data-rail={railOpen ? '1' : '0'}>
       {/* 顶栏 */}
       <div className="top">
         <div className="logo">
@@ -195,17 +198,26 @@ export default function App() {
           {running ? '抓取中…' : login.has_state ? '' : '未登录'}
         </div>
         <div className="skins">
-          {SKINS.map((s) => (
+          {PRESETS.map((preset) => (
             <button
-              key={s.k}
-              className={'swatch' + (skin === s.k ? ' on' : '')}
-              title={s.name}
-              aria-label={`外观：${s.name}`}
-              aria-pressed={skin === s.k}
-              style={{ background: `linear-gradient(135deg, ${s.bg} 0 50%, ${s.acc} 50% 100%)` }}
-              onClick={() => changeSkin(s.k)}
+              key={preset.key}
+              className={'swatch' + (theme.key === preset.key ? ' on' : '')}
+              title={preset.name}
+              aria-label={`外观：${preset.name}`}
+              aria-pressed={theme.key === preset.key}
+              style={{ background: `linear-gradient(135deg, ${preset.bg} 0 50%, ${preset.acc} 50% 100%)` }}
+              onClick={() => chooseTheme(preset.key)}
             />
           ))}
+          <button
+            className={'swatch swatch-add' + (theme.key === 'custom' ? ' on' : '')}
+            title="自定义主题"
+            aria-label="自定义主题"
+            aria-pressed={theme.key === 'custom'}
+            onClick={() => setThemeOpen(true)}
+          >
+            <i className="ti ti-plus" />
+          </button>
         </div>
         <button
           className={'icon-btn' + (railOpen ? ' on' : '')}
@@ -331,6 +343,14 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {themeOpen && (
+        <ThemeEditor
+          initial={theme.custom ?? palette}
+          onSave={saveCustomTheme}
+          onClose={() => setThemeOpen(false)}
+        />
+      )}
 
       {toast && <div className="toast">{toast}</div>}
     </div>

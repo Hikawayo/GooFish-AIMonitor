@@ -84,22 +84,18 @@
 
 ---
 
-## 🎨 五套配色，随心换
+## 🎨 两套配色，外加你自己的
 
-顶栏点一下就换，换好会替你记住。配色都是照着这几家的真实风格调的：
+顶栏点一下就换，换好会替你记住。新用户默认浅色（白 + `#00AABB`），也可以切到纯黑白。想更花一点就点色板末尾的「＋」，自己挑背景、文字和强调色，保存后只对你自己的浏览器生效。
 
 <table>
 <tr>
-<td width="50%" align="center"><b>Linear</b> · 靛蓝暗色<br/><img src="docs/screenshots/skin-linear.png" alt="Linear"/></td>
-<td width="50%" align="center"><b>Vercel</b> · 极简纯黑<br/><img src="docs/screenshots/skin-vercel.png" alt="Vercel"/></td>
+<td width="50%" align="center"><b>浅色</b> · 默认<br/><img src="docs/screenshots/skin-light.png" alt="浅色"/></td>
+<td width="50%" align="center"><b>深色</b> · 黑白<br/><img src="docs/screenshots/skin-dark.png" alt="深色"/></td>
 </tr>
 <tr>
-<td align="center"><b>Stripe</b> · 蓝紫亮色<br/><img src="docs/screenshots/skin-stripe.png" alt="Stripe"/></td>
-<td align="center"><b>Supabase</b> · 翡翠暗色<br/><img src="docs/screenshots/skin-supabase.png" alt="Supabase"/></td>
-</tr>
-<tr>
-<td align="center"><b>Apple</b> · 苹果亮色<br/><img src="docs/screenshots/skin-apple.png" alt="Apple"/></td>
-<td align="center"><i>侧边栏可收起 · 应用内统一对话框</i><br/><img src="docs/screenshots/dialog.png" alt="统一对话框"/></td>
+<td align="center"><b>自定义</b> · 自己配三种颜色<br/><img src="docs/screenshots/skin-custom.png" alt="自定义"/></td>
+<td align="center"><b>配色表单</b> · 改色即时预览<br/><img src="docs/screenshots/theme-editor.png" alt="自定义主题"/></td>
 </tr>
 </table>
 

@@ -41,7 +41,7 @@ export function ownFolders(watches, folders, visibility) {
   return [...grouped.values(), { id: 'ungrouped', name: '未归档', watches: [] }]
 }
 
-export default function Folders({ choices, selected, onSelect, visibility, onVisibility }) {
+export default function Folders({ choices, selected, onSelect, visibility, onVisibility, counts = {} }) {
   return (
     <aside className="folder-nav" aria-label="监控文件夹">
       <div className="folder-filters">
@@ -60,6 +60,7 @@ export default function Folders({ choices, selected, onSelect, visibility, onVis
             onClick={() => onSelect(folder.id)}>
             <i className="ti ti-folder" aria-hidden="true" />
             {folder.name}
+            {counts[folder.id] ? <b className="folder-count">{counts[folder.id]}</b> : null}
           </button>
         ))}
       </div>

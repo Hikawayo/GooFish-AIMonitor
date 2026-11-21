@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { Card, Button, Badge, Spinner, EmptyState, Thumb, TimeMeta } from '../components/ui'
 import { yuan, fmtDate, fmtDateTime, ago } from '../util'
@@ -18,7 +18,16 @@ export default function Recommendations({ refreshKey, onToast }) {
   const [visibility, setVisibility] = useState('mine')
   const [folderId, setFolderId] = useState('')
   const [sortOrder, setSortOrder] = useState('published-desc')
+  const [savedShared, setSavedShared] = useState({})
   const { watches, folders, shared, error } = useFolders(refreshKey, visibility)
+
+  // 自己还没有条件时先打开公开组: 否则新成员第一次进来只看到空列表, 不知道有别人的组可看
+  const autoShared = useRef(false)
+  useEffect(() => {
+    if (autoShared.current || watches.length || !shared.length) return
+    autoShared.current = true
+    setVisibility('public')
+  }, [watches.length, shared.length])
 
   const load = () => api.recommendations('new').then(setItems)
   useEffect(() => {
@@ -146,19 +155,28 @@ export default function Recommendations({ refreshKey, onToast }) {
   if (items === null) return <Spinner />
 
   const isPublic = visibility === 'public'
+  const manual = cfg?.review_enabled === false     // 关掉 AI 审核 → 全部候选都由本人裁决
   const choices = isPublic ? shared : ownFolders(watches, folders, visibility)
   const selected = choices.find((folder) => folder.id === folderId) ?? choices[0]
-  const source = isPublic ? [] : items.flatMap((item) => {
+
+  const itemIn = (item, folder) => {
     const matches = item.watch_matches ?? []
-    if (selected?.id === 'ungrouped') return matches.length ? [] : [item]
-    const inFolder = matches.filter((match) => selected?.watches.includes(match.watch_id))
-    const match = inFolder.find((entry) => entry.rec_ok === true && entry.reason !== REVIEW_NOT_RUN)
-      ?? inFolder[0]
-    return match ? [{ ...item, ...match }] : []
-  })
-  const passed = source.filter((item) => item.rec_ok === true && item.reason !== REVIEW_NOT_RUN)
-  const manual = cfg?.review_enabled === false     // 关掉 AI 审核 → 全部候选都由本人裁决
+    if (folder?.id === 'ungrouped') return matches.length ? null : item
+    const inside = matches.filter((match) => folder?.watches.includes(match.watch_id))
+    if (!inside.length) return null
+    const match = inside.find((entry) => entry.rec_ok === true && entry.reason !== REVIEW_NOT_RUN)
+      ?? inside[0]
+    return { ...item, ...match }
+  }
+  const listIn = (folder) => (isPublic ? [] : items.map((item) => itemIn(item, folder)).filter(Boolean))
+  const passedIn = (folder) => listIn(folder).filter((item) => item.rec_ok === true && item.reason !== REVIEW_NOT_RUN)
+  const source = listIn(selected)
+  const passed = passedIn(selected)
   const shown = sortItems(manual || !onlyPassed ? source : passed, sortOrder)
+  // 各文件夹的数字: 侧栏计数是全账号的, 不标这里会以为有商品没加载出来
+  const counts = Object.fromEntries(choices.map((folder) => [folder.id, isPublic
+    ? (folder.items?.length ?? 0)
+    : (manual || !onlyPassed ? listIn(folder) : passedIn(folder)).length]))
 
   const sharedFavorite = async (item) => {
     const key = `shared:${item.item_id}`
@@ -166,6 +184,7 @@ export default function Recommendations({ refreshKey, onToast }) {
     try {
       const r = await api.favoriteShared(selected.id, item.item_id)
       onToast?.(r.ok ? '已站内收藏' : '收藏失败，请稍后重试')
+      if (r.ok) setSavedShared((state) => ({ ...state, [item.item_id]: true }))
     } catch (error) {
       onToast?.(error.message)
     } finally {
@@ -175,11 +194,11 @@ export default function Recommendations({ refreshKey, onToast }) {
 
   return (
     <section>
-      <h1 className="page-title">待审推荐</h1>
+      <h1 className="page-title">{isPublic ? '公开行情' : '待审推荐'}</h1>
       {error && <p role="alert" className="test-err">{error}</p>}
       <div className="folder-layout">
         <Folders choices={choices} selected={selected?.id} onSelect={setFolderId}
-          visibility={visibility} onVisibility={setVisibility} />
+          visibility={visibility} onVisibility={setVisibility} counts={counts} />
         <div className="folder-results">
       {selected && <div className="folder-heading">
         <h2>{selected.name}</h2>
@@ -213,8 +232,11 @@ export default function Recommendations({ refreshKey, onToast }) {
                   </div>
                   {item.seller_nick && <div className="rec-meta">卖家 {item.seller_nick}</div>}
                   <TimeMeta items={[['上架', ago(item.publish_time)], ['观测', fmtDateTime(item.observed_at)]]} />
-                  <Button disabled={busy[`shared:${item.item_id}`]} onClick={() => sharedFavorite(item)}>
-                    站内收藏
+                  <Button
+                    disabled={busy[`shared:${item.item_id}`] || savedShared[item.item_id]}
+                    onClick={() => sharedFavorite(item)}
+                  >
+                    {savedShared[item.item_id] ? '已收藏' : '站内收藏'}
                   </Button>
                 </div>
               </Card>

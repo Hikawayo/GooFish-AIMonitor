@@ -1,3 +1,5 @@
+import threading
+
 from xianyu_crawler.storage.db import make_session
 from xianyu_crawler.storage import repo
 from xianyu_crawler.models import Item
@@ -5,6 +7,31 @@ from xianyu_crawler.models import Item
 
 def session():
     return make_session("sqlite:///:memory:", create=True)
+
+
+def test_concurrent_first_open_builds_database_once(tmp_path):
+    """新账号首屏会并发打进来几个请求; 建表和配配置行都不能互踩(否则一片 500)。"""
+    url = f"sqlite:///{(tmp_path / 'race.db').as_posix()}"
+    errors = []
+    start = threading.Barrier(6)
+
+    def open_page():
+        try:
+            start.wait()
+            s = make_session(url, create=True)
+            repo.get_config(s)
+            repo.list_watches(s)
+            repo.stats(s)
+            s.close()
+        except Exception as e:  # noqa: BLE001 - 收集线程里的失败
+            errors.append(f"{type(e).__name__}: {e}")
+
+    threads = [threading.Thread(target=open_page) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
 
 
 def test_watch_crud():

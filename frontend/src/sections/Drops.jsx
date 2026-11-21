@@ -26,14 +26,21 @@ export default function Drops({ refreshKey }) {
     : [...ownFolders(watches, folders, visibility), ...(visibility === 'mine' ? publicChoices.filter(
       (folder) => items.some((item) => item.shared_folder_key === folder.id)
     ) : [])]
-  const selected = choices.find((folder) => folder.id === folderId) ?? choices[0]
-  const shown = items.filter((item) => {
-    if (selected?.id === 'ungrouped') {
-      return !item.watch_ids?.length && !publicChoices.some((folder) => folder.id === item.shared_folder_key)
+  const inFolder = (item, folder) => {
+    if (folder?.id === 'ungrouped') {
+      return !item.watch_ids?.length && !publicChoices.some((f) => f.id === item.shared_folder_key)
     }
-    return selected != null && (item.shared_folder_key === selected.id ||
-      item.watch_ids?.some((id) => selected.watches.includes(id)))
-  })
+    return folder != null && (item.shared_folder_key === folder.id ||
+      item.watch_ids?.some((id) => folder.watches.includes(id)))
+  }
+  // 默认落在真正有收藏的组: 只按顺序取第一个的话, 站内收藏的公开商品会藏在「未归档」下面看不见
+  const selected = choices.find((folder) => folder.id === folderId)
+    ?? choices.find((folder) => items.some((item) => inFolder(item, folder)))
+    ?? choices[0]
+  const shown = items.filter((item) => inFolder(item, selected))
+  const counts = Object.fromEntries(choices.map((folder) => [
+    folder.id, items.filter((item) => inFolder(item, folder)).length,
+  ]))
 
   return (
     <section>
@@ -41,7 +48,7 @@ export default function Drops({ refreshKey }) {
       {error && <p role="alert" className="test-err">{error}</p>}
       <div className="folder-layout">
         <Folders choices={choices} selected={selected?.id} onSelect={setFolderId}
-          visibility={visibility} onVisibility={setVisibility} />
+          visibility={visibility} onVisibility={setVisibility} counts={counts} />
         <div className="folder-results">
       {selected && <div className="folder-heading">
         <h2>{selected.name}</h2>

@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import select, or_, func, delete, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models import Item
@@ -293,9 +294,14 @@ def item_watch_ids(s: Session) -> dict[str, list[int]]:
 def get_config(s: Session) -> AppConfig:
     cfg = s.get(AppConfig, 1)
     if cfg is None:
-        cfg = AppConfig(id=1)
-        s.add(cfg)
-        s.commit()
+        s.add(AppConfig(id=1))
+        try:
+            s.commit()
+        except IntegrityError:      # 同一新账号的首屏请求并发建配置行
+            s.rollback()
+        cfg = s.get(AppConfig, 1)
+        if cfg is None:
+            raise RuntimeError("app_config 初始化失败")
     return cfg
 
 
