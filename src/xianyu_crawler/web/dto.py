@@ -26,6 +26,8 @@ class WatchIn(BaseModel):
     seller_min_credit: int | None = None
     requirement: str | None = None
     enabled: bool = True
+    public: bool = False
+    folder_id: int | None = None
 
 
 class WatchOut(WatchIn):
@@ -118,6 +120,7 @@ class RecommendationOut(BaseModel):
     free_shipping: bool | None = None
     seller_nick: str | None = None
     watch_name: str | None = None
+    watch_matches: list[WatchMatchOut] = []
     pic_url: str | None = None
     want_count: int | None = None         # 想要次数
     browse_count: int | None = None       # 浏览次数(详情页, 死链核活时取)
@@ -138,6 +141,8 @@ class FavoriteOut(BaseModel):
     url: str
     price: float
     reduce_price: float
+    watch_ids: list[int] = []
+    shared_folder_key: str | None = None
     location: str | None = None
     condition: str | None = None
     free_shipping: bool | None = None
@@ -149,6 +154,18 @@ class FavoriteOut(BaseModel):
     publish_time: str | None = None
     first_seen_at: str | None = None
     price_changed_at: str | None = None
+
+
+class WatchMatchOut(BaseModel):
+    watch_id: int
+    price: float
+    rec_ok: bool | None
+    reason: str | None
+
+
+class FolderOut(BaseModel):
+    id: int
+    name: str
 
 
 # --- mappers ---
@@ -164,6 +181,8 @@ def watchin_to_fields(b: WatchIn) -> dict:
         "seller_min_credit": b.seller_min_credit,
         "requirement": b.requirement,
         "enabled": b.enabled,
+        "public": b.public,
+        "folder_id": b.folder_id,
     }
 
 
@@ -180,10 +199,12 @@ def watchrow_to_out(w: WatchRow) -> WatchOut:
         seller_min_credit=w.seller_min_credit,
         requirement=w.requirement,
         enabled=w.enabled,
+        public=w.public,
+        folder_id=w.folder_id,
     )
 
 
-def config_to_out(c: AppConfig) -> ConfigOut:
+def config_to_out(c: AppConfig, *, member: bool = False) -> ConfigOut:
     return ConfigOut(
         schedule_minutes=c.schedule_minutes,
         favorites_minutes=c.favorites_minutes,
@@ -195,7 +216,8 @@ def config_to_out(c: AppConfig) -> ConfigOut:
         search_max_pages=c.search_max_pages,
         favorites_max_pages=c.favorites_max_pages,
         review_enabled=c.review_enabled,
-        review_base_url=c.review_base_url or Settings().review_base_url,  # 显示生效值(可能来自本地 secret.env)
+        review_base_url=c.review_base_url or (
+            str(Settings.model_fields["review_base_url"].default) if member else Settings().review_base_url),
         review_model=c.review_model,
         review_token_set=bool(c.review_api_token),
         review_timeout=c.review_timeout,
@@ -234,7 +256,7 @@ def itemrow_to_rec(r: ItemRow) -> RecommendationOut:
 def itemrow_to_fav(r: ItemRow) -> FavoriteOut:
     return FavoriteOut(
         item_id=r.item_id, title=r.title, url=r.url, price=r.latest_price,
-        reduce_price=r.reduce_price or 0.0, location=r.location,
+        reduce_price=r.reduce_price or 0.0, location=r.location, shared_folder_key=r.shared_folder_key,
         condition=r.condition, free_shipping=r.free_shipping, seller_nick=r.seller_nick,
         favorited_at=_iso(r.favorited_at),
         pic_url=r.pic_url, dead=r.dead, dead_reason=r.dead_reason,

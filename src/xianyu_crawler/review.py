@@ -2,9 +2,7 @@
 
 端点: POST {review_base_url}/chat/completions (OpenAI Chat Completions 格式)。
 具体接口地址/密钥由本地配置(data/secret.env 的 XIANYU_REVIEW_BASE_URL /
-XIANYU_REVIEW_API_TOKEN)或控制台设置提供, 不写进仓库。**优先用结构化输出**
-(response_format=json_schema): 让端点用语法约束解码, 从首 token 起就只能吐合规 JSON,
-既根治"没有 JSON 数组", 也能让推理模型跳过思考; 端点不支持时自动退回普通模式。
+XIANYU_REVIEW_API_TOKEN)或控制台设置提供，不写进仓库。每件商品各发一次请求。
 无要求/未启用/调用失败时**放行全部**(fail-open), 避免把推荐误黑洞掉。
 """
 from __future__ import annotations
@@ -23,11 +21,8 @@ logger = logging.getLogger(__name__)
 
 # 审核没跑通(接口报错/未配置)时的占位理由; 一键补审据此识别"还没真正审过"的条目。
 REVIEW_NOT_RUN = "(审核未运行)"
-
-# 一次最多送几条给模型审。分批是为了「推理模型」: 它们会把大量 token 花在思考
-# (reasoning_content)上, 一次塞太多条会把 max_tokens 用光、正文(content)为空 → 解析失败
-# → 整批被 fail-open 放行(显示「审核未运行」)。分小批让每次调用的思考量可控。
-REVIEW_BATCH = 5
+# 关闭 AI 审核后的模式: 不调用模型, 候选留作人工审核。
+REVIEW_MANUAL = "(人工审核)"
 
 # 有些推理模型把思考内联在 content 里(<think>...</think>), 解析前先剥掉。
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
@@ -37,75 +32,42 @@ def _strip_think(text: str | None) -> str:
     return _THINK_RE.sub("", text or "").strip()
 
 
-# 结构化输出 schema: 强制端点吐 {"verdicts":[{i,ok,reason}]}。OpenAI / LM Studio / vLLM
-# 等都认 response_format=json_schema; 老接口不认时 _call_llm 会自动退回普通模式。
-_RESPONSE_FORMAT = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "verdicts",
-        "strict": True,
-        "schema": {
-            "type": "object",
-            "properties": {
-                "verdicts": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "i": {"type": "integer"},
-                            "ok": {"type": "boolean"},
-                            "reason": {"type": "string"},
-                        },
-                        "required": ["i", "ok", "reason"],
-                        "additionalProperties": False,
-                    },
-                }
-            },
-            "required": ["verdicts"],
-            "additionalProperties": False,
-        },
-    },
-}
-
-
 class ReviewVerdict(BaseModel):
     ok: bool
     reason: str = ""
+    # 审核没真正跑(未启用/调用失败) → 调用方不要把 ok 当作裁决
+    skipped: bool = False
 
 
 def review_items(items: list[Item], requirement: str | None,
                  settings: Settings) -> list[ReviewVerdict]:
-    """逐条判定候选是否符合 requirement; 未启用/无要求/失败则全部放行。
-
-    分小批(REVIEW_BATCH)调用: 某一批失败只放行那一批, 不会一条坏掉拖垮整轮。
-    """
-    if not settings.review_enabled or not requirement or not items:
+    """按顺序单独审核每件商品，失败的条目保留供补审。"""
+    if not settings.review_enabled:
+        return [ReviewVerdict(ok=True, reason=REVIEW_MANUAL, skipped=True) for _ in items]
+    if not requirement or not items:
         return [ReviewVerdict(ok=True) for _ in items]
     out: list[ReviewVerdict] = []
-    for i in range(0, len(items), REVIEW_BATCH):
-        chunk = items[i:i + REVIEW_BATCH]
+    for item in items:
         try:
-            content = _call_llm(_build_messages(chunk, requirement, settings), settings)
-            out.extend(_parse_verdicts(content, len(chunk)))
-        except Exception as e:  # noqa: BLE001 - 审核失败不应黑洞推荐, 本批放行
-            logger.warning("二次审核失败(本批 %d 条放行): %s", len(chunk), _friendly_error(e))
-            out.extend(ReviewVerdict(ok=True, reason=REVIEW_NOT_RUN) for _ in chunk)
+            content = _call_llm(_build_messages(item, requirement, settings), settings)
+            out.append(_parse_verdict(content))
+        except Exception as e:  # noqa: BLE001 - 审核失败保留本条
+            logger.warning("单条 AI 审核失败: %s", _friendly_error(e))
+            out.append(ReviewVerdict(ok=True, reason=REVIEW_NOT_RUN, skipped=True))
     return out
 
 
-def _build_messages(items: list[Item], requirement: str, settings: Settings) -> list[dict]:
-    lines = []
-    for i, it in enumerate(items):
-        meta = " | ".join(p for p in [
-            f"¥{it.price:.0f}",
-            f"成色:{it.condition}" if it.condition else "",
-            f"地区:{it.location}" if it.location else "",
-        ] if p)
-        lines.append(f"{i}. {it.title}  [{meta}]")
+def _build_messages(item: Item, requirement: str, settings: Settings) -> list[dict]:
+    meta = " | ".join(p for p in [
+        f"¥{item.price:.0f}",
+        f"成色:{item.condition}" if item.condition else "",
+        f"地区:{item.location}" if item.location else "",
+    ] if p)
     user = (
         f"要求: {requirement}\n\n"
-        "逐个判断下面的商品是否符合上面的要求:\n" + "\n".join(lines) +
-        '\n\n只输出 JSON 数组, 每项 {"i":序号,"ok":true/false,"reason":"一句话中文理由"}。不要输出别的。'
+        f"判断下面这件商品是否符合要求:\n0. {item.title}  [{meta}]"
+        '\n\n只输出包含一项的 JSON 数组，格式为 [{"i":0,"ok":true,"reason":"一句话中文理由"}]。'
+        'ok 按实际判断填 true 或 false。'
     )
     return [{"role": "system", "content": settings.review_system_prompt},
             {"role": "user", "content": user}]
@@ -124,15 +86,12 @@ def _call_llm(messages: list[dict], settings: Settings) -> str:
         "temperature": settings.review_temperature,
     }
 
-    def _post(b: dict) -> httpx.Response:
-        return httpx.post(url, json=b, headers=headers, timeout=settings.review_timeout)
-
-    # 优先结构化输出; 端点不认 response_format(常见 400/404/422)就退回普通模式。
-    resp = _post({**body, "response_format": _RESPONSE_FORMAT})
-    if resp.status_code in (400, 404, 422):
-        resp = _post(body)
+    resp = httpx.post(url, json=body, headers=headers, timeout=settings.review_timeout)
     resp.raise_for_status()
-    msg = (resp.json().get("choices") or [{}])[0].get("message") or {}
+    choice = (resp.json().get("choices") or [{}])[0]
+    if choice.get("finish_reason") == "length":
+        return ""
+    msg = choice.get("message") or {}
     content = _strip_think(msg.get("content"))
     if not content:
         # 推理模型常把正文留在 reasoning_content; content 为空时兜底取它(也剥思考标签)
@@ -156,23 +115,14 @@ def _coerce_array(content: str) -> list:
     raise ValueError("JSON 里没有 verdicts 数组")
 
 
-def _parse_verdicts(content: str, n: int) -> list[ReviewVerdict]:
-    arr = _coerce_array(content)
-    by_i: dict[int, dict] = {}
-    for v in arr:
-        if isinstance(v, dict) and "i" in v:
-            try:
-                by_i[int(v["i"])] = v
-            except (ValueError, TypeError):
-                continue
-    out: list[ReviewVerdict] = []
-    for idx in range(n):
-        v = by_i.get(idx)
-        if v is None:
-            out.append(ReviewVerdict(ok=True))          # 缺失 → 放行
-        else:
-            out.append(ReviewVerdict(ok=bool(v.get("ok")), reason=str(v.get("reason") or "")))
-    return out
+def _parse_verdict(content: str) -> ReviewVerdict:
+    verdicts = _coerce_array(content)
+    if len(verdicts) != 1 or not isinstance(verdicts[0], dict):
+        raise ValueError("JSON 应只包含一条裁决")
+    verdict = verdicts[0]
+    if verdict.get("i") not in (0, "0") or not isinstance(verdict.get("ok"), bool):
+        raise ValueError("JSON 裁决缺少有效的商品序号或判断")
+    return ReviewVerdict(ok=verdict["ok"], reason=str(verdict.get("reason") or ""))
 
 
 def _extract_json_array(text: str) -> list:
@@ -211,16 +161,10 @@ def test_review(settings: Settings, requirement: str | None = None) -> dict:
 
     诚实判定: 只有「真的拿到可解析的裁决」才算 ok。连上了但正文为空 / 不是 JSON 都算失败
     并给出可操作的原因——否则会出现「测试通过但实际审核全跳过」的假阳性(正是推理模型的坑)。
-    用一整批(REVIEW_BATCH 条)+ 真实「AI 审核要求」来测, 尽量贴近真实一轮, 能提前暴露
-    「推理模型把 token 用在思考、content 为空」的问题。
+    使用一件样品和实际「AI 审核要求」，与正常审核的请求大小一致。
     """
-    sample = [
-        Item(item_id="0", title="MacBook Pro 16寸 M1 Pro 32G 1T 国行 95新", url="", price=7000, condition="95新", location="北京"),
-        Item(item_id="1", title="MacBook Pro 14寸 M1 Pro 16G 512G", url="", price=5000, condition="9成新", location="上海"),
-        Item(item_id="2", title="MacBook Air M1 8G 256G", url="", price=3000, condition="95新", location="广州"),
-        Item(item_id="3", title="MacBook Pro 16寸 M1 Max 32G 1T 国行", url="", price=8000, condition="99新", location="深圳"),
-        Item(item_id="4", title="MacBook Pro 16寸 M1 Pro 32G 512G", url="", price=6000, condition="9成新", location="杭州"),
-    ][:REVIEW_BATCH]
+    sample = Item(item_id="0", title="MacBook Pro 16寸 M1 Pro 32G 1T 国行 95新",
+                  url="", price=7000, condition="95新", location="北京")
     req = requirement or "只要 16 寸、M1 Pro、32G 内存、1T 硬盘、国行; 不要阉割版 / 16G / 512G"
     try:
         content = _call_llm(_build_messages(sample, req, settings), settings)
@@ -231,7 +175,7 @@ def test_review(settings: Settings, requirement: str | None = None) -> dict:
                 "error": "连上了, 但模型没返回正文(content 为空)。多半是推理模型把 token 额度用在思考上 —"
                          "调大「最大 tokens」(如 8000)、缩短「AI 审核要求」, 或换非推理模型。"}
     try:
-        _parse_verdicts(content, len(sample))
+        _parse_verdict(content)
     except Exception:  # noqa: BLE001
         return {"ok": False, "model": settings.review_model, "reply": content.strip()[:200],
                 "error": "连上了, 但返回的不是可解析的 JSON 数组(见下方片段)。调大 max_tokens 或换模型。"}

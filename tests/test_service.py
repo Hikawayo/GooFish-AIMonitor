@@ -1,7 +1,9 @@
+from sqlalchemy import select
+
 from xianyu_crawler import service
 from xianyu_crawler.storage.db import make_session
 from xianyu_crawler.storage import repo
-from xianyu_crawler.storage.orm import ItemRow
+from xianyu_crawler.storage.orm import ItemRow, PublishedPrice, WatchMatch
 from xianyu_crawler.models import Item
 from xianyu_crawler.config import Settings, Watch
 
@@ -67,6 +69,7 @@ def test_sweep_liveness_marks_dead(monkeypatch):
     assert repo.is_dead(s, "alive") is False
     # 核活顺带把浏览/收藏/想要次数回写到 alive
     row = s.get(ItemRow, "alive")
+    assert row is not None
     assert (row.browse_count, row.collect_count, row.want_count) == (134, 3, 7)
     # 死链仍在待审列表(置灰展示, 不删除), 但不会被重复判死
     assert {r.item_id for r in repo.list_recommendations(s, "new")} == {"alive", "gone"}
@@ -96,6 +99,49 @@ def test_reject_recommendation():
     repo.create_recommendation(s, Item(item_id="d", title="t", url="u", price=500), "w")
     service.reject_recommendation(s, "d")
     assert repo.list_recommendations(s, "new") == []
+
+
+# --- 人工审核模式(不绑 API) ---
+def test_scan_without_ai_keeps_candidates_for_manual_review(monkeypatch):
+    s = make_session("sqlite:///:memory:", create=True)
+    monkeypatch.setattr(service, "_search",
+                        lambda ctx, w, st: [Item(item_id="m", title="t", url="u", price=100)])
+    w = Watch(name="w", keywords=["x"], requirement="只要正品")
+    assert service.scan_recommendations(None, s, Settings(review_enabled=False), [w]) == 0
+    [rec] = repo.list_recommendations(s)          # 仍进待审队列, 但没有 AI 裁决
+    assert rec.rec_ok is None and rec.rec_reason is None
+    assert [e.type for e in repo.recent_events(s)] == ["new_recommendation"]
+
+
+def test_manual_verdict_confirms_public_match_only_when_ai_review_is_off():
+    s = make_session("sqlite:///:memory:", create=True)
+    watch = repo.add_watch(s, name="公开组", keywords='["x"]', public=True, requirement="只要正品")
+    item = Item(item_id="m", title="t", url="u", price=100)
+    repo.create_recommendation(s, item, "公开组")
+    repo.save_watch_match(s, watch.id, item, None, None)
+
+    def match():
+        row = s.get(WatchMatch, (watch.id, "m"))
+        assert row is not None
+        return row
+
+    def rec():
+        row = s.get(ItemRow, "m")
+        assert row is not None
+        return row
+
+    repo.update_config(s, review_enabled=True)      # AI 模式下不动 AI 裁决
+    service.record_manual_verdict(s, "m", True)
+    assert match().ok is None
+
+    repo.update_config(s, review_enabled=False)
+    service.record_manual_verdict(s, "m", True)
+    assert match().ok is True and match().reason == service.MANUAL_APPROVED
+    assert rec().rec_ok is True
+    assert list(s.scalars(select(PublishedPrice)))  # 人工通过 → 公开行情开始留观测
+
+    service.record_manual_verdict(s, "m", False)    # 改判忽略 → 退出公开
+    assert match().ok is False and rec().rec_ok is False
 
 
 def test_mute_recommendation_hides_and_blocks_rescan(monkeypatch):
@@ -181,7 +227,7 @@ def test_rereview_keeps_unrun_when_llm_still_fails(monkeypatch):
     _seed_pending(s, review)
     # LLM 仍没跑通 → 占位裁决, 不改写原裁决, 只计数
     monkeypatch.setattr(review, "review_items", lambda items, req, st: [
-        review.ReviewVerdict(ok=True, reason=review.REVIEW_NOT_RUN) for _ in items])
+        review.ReviewVerdict(ok=True, reason=review.REVIEW_NOT_RUN, skipped=True) for _ in items])
     out = service.rereview_pending(s, Settings())
     assert out["reviewed"] == 0 and out["not_run"] == 2
 

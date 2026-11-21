@@ -4,11 +4,12 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone, timedelta
 
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, delete, update
 from sqlalchemy.orm import Session
 
 from ..models import Item
-from .orm import ItemRow, PriceHistory, Event, WatchRow, AppConfig
+from .orm import ItemRow, PriceHistory, PublishedPrice, Event, WatchRow, WatchMatch, AppConfig
+from ..review import REVIEW_NOT_RUN
 
 
 def _now() -> datetime:
@@ -51,7 +52,8 @@ def upsert_item_with_price(s: Session, item: Item, source: str,
         row.location = item.location
         row.condition = item.condition
         row.free_shipping = item.free_shipping
-        row.pic_url = item.pic_url
+        row.pic_url = item.pic_url or row.pic_url
+        row.seller_nick = item.seller_nick or row.seller_nick
         if item.publish_time and not row.publish_time:   # 补发布时间(收藏源没有)
             row.publish_time = item.publish_time
         row.last_seen_at = _now()
@@ -81,7 +83,74 @@ def is_favorited(s: Session, item_id: str) -> bool:
 def is_collected(s: Session, item_id: str) -> bool:
     """已在闲鱼收藏(我们点过收藏, 或出现在收藏列表)→ 不再作为推荐。"""
     row = s.get(ItemRow, item_id)
-    return bool(row and (row.favorited or row.source == "favorite"))
+    return bool(row and (row.local_saved or row.favorited or row.source == "favorite"))
+
+
+def save_local_favorite(s: Session, item_id: str, item: Item | None = None,
+                        folder_key: str | None = None) -> bool:
+    row = s.get(ItemRow, item_id)
+    if row is None and item is not None:
+        upsert_item_with_price(s, item, source="shared")
+        row = s.get(ItemRow, item_id)
+    if row is None:
+        return False
+    if not row.local_saved:
+        row.local_saved = True
+        row.favorited_at = row.favorited_at or _now()
+        if row.rec_status == "new":
+            row.rec_status = "approved"
+    if folder_key and not row.shared_folder_key:
+        row.shared_folder_key = folder_key
+    s.commit()
+    return True
+
+
+def due_local_favorites(s: Session, interval_minutes: int, limit: int) -> list[ItemRow]:
+    cutoff = _now() - timedelta(minutes=interval_minutes)
+    query = (
+        select(ItemRow).where(ItemRow.local_saved.is_(True), ItemRow.dead.is_(False),
+                              or_(ItemRow.detail_checked_at.is_(None), ItemRow.detail_checked_at <= cutoff))
+        .order_by(ItemRow.detail_checked_at.asc(), ItemRow.favorited_at.asc(), ItemRow.item_id)
+        .limit(limit)
+    )
+    return list(s.scalars(query))
+
+
+def record_local_price(s: Session, row: ItemRow, price: float) -> None:
+    now = _now()
+    if price != row.latest_price:
+        row.price_changed_at = now
+        row.reduce_price = max(row.latest_price - price, 0.0)
+    row.latest_price = price
+    row.last_seen_at = now
+    s.add(PriceHistory(item_id=row.item_id, price=price, observed_at=now))
+    s.execute(update(WatchMatch).where(WatchMatch.item_id == row.item_id)
+              .values(price=price, observed_at=now))
+    for match in s.scalars(select(WatchMatch).where(WatchMatch.item_id == row.item_id)):
+        record_published_price(s, match)
+    s.commit()
+
+
+def price_history(s: Session, item_id: str):
+    return list(reversed(list(s.scalars(select(PriceHistory).where(PriceHistory.item_id == item_id)
+                                        .order_by(PriceHistory.observed_at.desc(), PriceHistory.id.desc())
+                                        .limit(500)))))
+
+
+def record_published_price(s: Session, match: WatchMatch) -> None:
+    watch = s.get(WatchRow, match.watch_id)
+    if not watch or not watch.public or match.ok is not True or match.reason == REVIEW_NOT_RUN:
+        return
+    if watch.requirement and match.reason is None:
+        return
+    item = s.get(ItemRow, match.item_id)
+    if not item or item.dead or item.rec_status == "rejected" or (item.muted_until and item.muted_until > _now()):
+        return
+    previous = s.scalar(select(PublishedPrice.price)
+                        .where(PublishedPrice.watch_id == match.watch_id, PublishedPrice.item_id == match.item_id)
+                        .order_by(PublishedPrice.id.desc()).limit(1))
+    if previous != match.price:
+        s.add(PublishedPrice(watch_id=match.watch_id, item_id=match.item_id, price=match.price))
 
 
 def is_dead(s: Session, item_id: str) -> bool:
@@ -169,8 +238,16 @@ def update_watch(s: Session, watch_id: int, **fields) -> WatchRow | None:
     row = s.get(WatchRow, watch_id)
     if row is None:
         return None
+    if "name" in fields and fields["name"] != row.name:
+        s.execute(update(ItemRow).where(ItemRow.watch_name == row.name).values(watch_name=fields["name"]))
+    visibility_changed = fields.get("public", row.public) != row.public or fields.get("folder_id", row.folder_id) != row.folder_id
+    if visibility_changed:
+        s.execute(delete(PublishedPrice).where(PublishedPrice.watch_id == watch_id))
     for k, v in fields.items():
         setattr(row, k, v)
+    if visibility_changed and row.public:
+        for match in watch_matches(s, row.id):
+            record_published_price(s, match)
     s.commit()
     return row
 
@@ -178,8 +255,37 @@ def update_watch(s: Session, watch_id: int, **fields) -> WatchRow | None:
 def delete_watch(s: Session, watch_id: int) -> None:
     row = s.get(WatchRow, watch_id)
     if row is not None:
+        s.execute(delete(PublishedPrice).where(PublishedPrice.watch_id == watch_id))
+        s.execute(delete(WatchMatch).where(WatchMatch.watch_id == watch_id))
         s.delete(row)
         s.commit()
+
+
+def watch_matches(s: Session, watch_id: int):
+    return s.scalars(select(WatchMatch).where(WatchMatch.watch_id == watch_id))
+
+
+def save_watch_match(s: Session, watch_id: int, item: Item,
+                     ok: bool | None, reason: str | None) -> None:
+    match = s.get(WatchMatch, (watch_id, item.item_id))
+    if match is None:
+        match = WatchMatch(watch_id=watch_id, item_id=item.item_id)
+        s.add(match)
+    match.ok = ok
+    match.reason = reason
+    match.title = item.title
+    match.url = item.url
+    match.price = item.price
+    match.observed_at = _now()
+    record_published_price(s, match)
+    s.commit()
+
+
+def item_watch_ids(s: Session) -> dict[str, list[int]]:
+    result: dict[str, list[int]] = {}
+    for item_id, watch_id in s.execute(select(WatchMatch.item_id, WatchMatch.watch_id)):
+        result.setdefault(item_id, []).append(watch_id)
+    return result
 
 
 # ---------- App config (单行) ----------
@@ -230,7 +336,7 @@ def list_recommendations(s: Session, status: str = "new") -> list[ItemRow]:
     q = select(ItemRow).where(ItemRow.rec_status == status)
     if status == "new":
         # 待审里排除已收藏、当前静音中的; 死链保留(置灰提示别再开)
-        q = q.where(ItemRow.favorited.is_(False)).where(
+        q = q.where(ItemRow.favorited.is_(False), ItemRow.local_saved.is_(False)).where(
             or_(ItemRow.muted_until.is_(None), ItemRow.muted_until <= _now()))
     return list(s.scalars(
         q.order_by(ItemRow.dead.asc(), ItemRow.rec_created_at.desc())))
@@ -271,7 +377,7 @@ def list_favorites(s: Session) -> list[ItemRow]:
     """收藏视图 = 闲鱼收藏夹(source=favorite) ∪ 我们批准收藏过的。死链排末尾。"""
     return list(s.scalars(
         select(ItemRow)
-        .where(or_(ItemRow.favorited.is_(True), ItemRow.source == "favorite"))
+        .where(or_(ItemRow.local_saved.is_(True), ItemRow.favorited.is_(True), ItemRow.source == "favorite"))
         .order_by(ItemRow.dead.asc(), ItemRow.reduce_price.desc(),
                   ItemRow.last_seen_at.desc())))
 
@@ -290,7 +396,7 @@ def stats(s: Session) -> dict:
         "pending": len(new),
         "passed": sum(1 for r in new if r.rec_ok is not False),
         "watches": int(s.scalar(select(func.count()).select_from(WatchRow)) or 0),
-        "favorites": cnt(or_(ItemRow.favorited.is_(True), ItemRow.source == "favorite")),
+        "favorites": cnt(or_(ItemRow.local_saved.is_(True), ItemRow.favorited.is_(True), ItemRow.source == "favorite")),
         "dead": cnt(ItemRow.dead.is_(True)),
         "drops_today": int(s.scalar(
             select(func.count()).select_from(Event)

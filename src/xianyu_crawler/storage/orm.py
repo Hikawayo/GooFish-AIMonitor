@@ -41,7 +41,10 @@ class ItemRow(Base):
     source: Mapped[str] = mapped_column(String)            # search|favorite
     favorited: Mapped[bool] = mapped_column(Boolean, default=False)
     favorited_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    local_saved: Mapped[bool] = mapped_column(Boolean, default=False)
+    detail_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     watch_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    shared_folder_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     rec_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # new|approved|rejected
     rec_created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     rec_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # LLM 二次审核理由
@@ -69,6 +72,12 @@ class Event(Base):
     notified: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class WatchFolder(Base):
+    __tablename__ = "watch_folders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+
+
 class WatchRow(Base):
     """控制台管理的监控条件(持久化, 取代 watchlist.yaml)。"""
     __tablename__ = "watches"
@@ -83,6 +92,29 @@ class WatchRow(Base):
     seller_min_credit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     requirement: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # 自然语言要求(LLM审核)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    public: Mapped[bool] = mapped_column(Boolean, default=False)
+    folder_id: Mapped[Optional[int]] = mapped_column(ForeignKey("watch_folders.id"))
+
+
+class WatchMatch(Base):
+    __tablename__ = "watch_matches"
+    watch_id: Mapped[int] = mapped_column(ForeignKey("watches.id"), primary_key=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey("items.item_id"), primary_key=True)
+    ok: Mapped[Optional[bool]] = mapped_column(Boolean)
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+    title: Mapped[Optional[str]] = mapped_column(Text)
+    url: Mapped[Optional[str]] = mapped_column(String)
+    price: Mapped[float] = mapped_column(Float)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class PublishedPrice(Base):
+    __tablename__ = "published_prices"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    watch_id: Mapped[int] = mapped_column(ForeignKey("watches.id"), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey("items.item_id"), index=True)
+    price: Mapped[float] = mapped_column(Float)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class AppConfig(Base):

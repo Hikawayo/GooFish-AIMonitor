@@ -8,16 +8,18 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import Settings, Watch
 from .models import Item
 from .filter import matches
 from .storage import repo
-from .storage.orm import WatchRow, AppConfig, ItemRow
+from .storage.orm import WatchRow, WatchMatch, AppConfig, ItemRow
 from . import search as _search_mod
 from . import favorite as _favorite_mod
 from . import pipeline
+from .price_monitor import detect_drop
 from . import review
 from . import liveness as _liveness_mod
 
@@ -38,6 +40,7 @@ def _add_favorite(ctx, item: Item, settings: Settings) -> bool:
 # --- row ↔ domain 映射 ---
 def watchrow_to_watch(w: WatchRow) -> Watch:
     return Watch(
+        id=w.id,
         name=w.name,
         keywords=json.loads(w.keywords or "[]"),
         price_min=w.price_min,
@@ -65,6 +68,7 @@ def effective_settings(cfg: AppConfig) -> Settings:
         "headless": cfg.headless,
         "search_max_pages": cfg.search_max_pages,
         "favorites_max_pages": cfg.favorites_max_pages,
+        "favorites_minutes": cfg.favorites_minutes,
         # LLM 二次审核(接口地址/token 控制台没填则回退本地 secret.env)
         "review_enabled": cfg.review_enabled,
         "review_base_url": pick(cfg.review_base_url, base.review_base_url),
@@ -105,28 +109,44 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
         # 规则过滤 + 去重(本轮内 & 已推荐过的)
         fresh: list[Item] = []
         seen: set[str] = set()
+        known = {m.item_id: m for m in repo.watch_matches(session, w.id)} if w.id is not None else {}
         for item in _search(ctx, w, settings):
             if item.item_id in seen or not matches(item, w):
                 continue
-            # 跳过已推荐过的、已在闲鱼收藏的、已知死链的、近期不看的
-            if (repo.has_been_recommended(session, item.item_id)
-                    or repo.is_collected(session, item.item_id)
-                    or repo.is_dead(session, item.item_id)
-                    or repo.is_muted(session, item.item_id)):
-                continue
             seen.add(item.item_id)
+            previous = known.get(item.item_id)
+            if previous is not None:
+                repo.upsert_item_with_price(session, item, source="search")
+                previous.price = item.price
+                previous.observed_at = repo._now()
+                repo.record_published_price(session, previous)
+                session.commit()
+                continue
+            if (repo.is_dead(session, item.item_id) or repo.is_muted(session, item.item_id)
+                    or (w.id is None and (repo.has_been_recommended(session, item.item_id)
+                                         or repo.is_collected(session, item.item_id)))):
+                continue
             fresh.append(item)
         # LLM 二次审核(有 requirement 才审; 无要求/失败放行)。
         # 未通过的也入库(带 rec_ok=False + 理由), 由前端筛选展示; 返回值只数"通过"的(头条数字)。
         verdicts = review.review_items(fresh, w.requirement, settings)
         for item, verdict in zip(fresh, verdicts):
-            new = repo.create_recommendation(
-                session, item, w.name, verdict.reason or None, ok=verdict.ok)
+            ok = None if verdict.skipped else verdict.ok
+            # 人工审核没有理由可展示(页面本身就是待审队列); 只保留"没跑通"的提示
+            reason = None if verdict.reason == review.REVIEW_MANUAL else (verdict.reason or None)
+            if repo.is_collected(session, item.item_id):
+                repo.upsert_item_with_price(session, item, source="search")
+                new = False
+            else:
+                new = repo.create_recommendation(session, item, w.name, reason, ok=ok)
+            if w.id is not None:
+                repo.save_watch_match(session, w.id, item, ok, reason)
             if not new:
                 continue
-            if verdict.ok:
+            if ok:
                 created += 1
-            if verdict.ok is not False:        # 通过或未审(无要求)→ 算"新发现", 可推送
+            # 进事件流: AI 通过, 或人工审核模式下等人处理
+            if ok is True or (ok is None and not settings.review_enabled):
                 repo.add_event(session, item.item_id, "new_recommendation",
                                {"title": item.title, "url": item.url, "price": item.price,
                                 "pic": item.pic_url, "watch": w.name})
@@ -142,25 +162,45 @@ def rereview_pending(session: Session, settings: Settings) -> dict:
     if not settings.review_enabled:
         return {"ok": False, "error": "AI 审核未启用, 请先在设置里打开「启用 AI 审核」"}
     rows = [r for r in repo.list_recommendations(session, "new") if not r.dead]
-    requirements = {w.name: w.requirement for w in repo.list_watches(session)}
-    by_watch: dict[str | None, list] = {}
+    watches = repo.list_watches(session)
+    requirements = {w.name: w.requirement for w in watches}
+    by_watch: dict[str, list[tuple[ItemRow, WatchMatch | None]]] = {}
+    watch_by_id = {w.id: w.name for w in watches}
+    matches_by_item: dict[str, list[WatchMatch]] = {}
+    for match in session.scalars(select(WatchMatch)):
+        if match.watch_id in watch_by_id:
+            matches_by_item.setdefault(match.item_id, []).append(match)
+    skipped = 0
     for r in rows:
-        by_watch.setdefault(r.watch_name, []).append(r)
+        matches = matches_by_item.get(r.item_id, [])
+        if matches:
+            for match in matches:
+                by_watch.setdefault(watch_by_id[match.watch_id], []).append((r, match))
+        elif r.watch_name is not None:
+            by_watch.setdefault(r.watch_name, []).append((r, None))
+        else:
+            skipped += 1
 
-    reviewed = passed = rejected = not_run = skipped = 0
+    reviewed = passed = rejected = not_run = 0
     for wname, recs in by_watch.items():
         requirement = requirements.get(wname)
         if not requirement:                  # 该监控条件没写「AI 审核要求」→ 无从审核
             skipped += len(recs)
             continue
-        items = [Item(item_id=r.item_id, title=r.title, url=r.url, price=r.latest_price,
-                      condition=r.condition, location=r.location) for r in recs]
+        items = [Item(item_id=r.item_id, title=r.title, url=r.url, price=match.price if match else r.latest_price,
+                      condition=r.condition, location=r.location) for r, match in recs]
         verdicts = review.review_items(items, requirement, settings)
-        for r, v in zip(recs, verdicts):
-            if v.reason == review.REVIEW_NOT_RUN:   # 接口没跑通 → 保留原裁决, 只计数
+        for (r, match), v in zip(recs, verdicts):
+            if v.skipped:                            # 接口没跑通 → 保留原裁决, 只计数
                 not_run += 1
                 continue
-            repo.update_rec_verdict(session, r.item_id, v.ok, v.reason or None)
+            if match is not None:
+                match.ok = v.ok
+                match.reason = v.reason or None
+                repo.record_published_price(session, match)
+                session.commit()
+            if r.watch_name == wname:
+                repo.update_rec_verdict(session, r.item_id, v.ok, v.reason or None)
             reviewed += 1
             passed += int(bool(v.ok))
             rejected += int(not v.ok)
@@ -207,6 +247,27 @@ def reject_recommendation(session: Session, item_id: str) -> None:
     repo.set_rec_status(session, item_id, "rejected")
 
 
+MANUAL_APPROVED = "(人工通过)"
+MANUAL_REJECTED = "(人工忽略)"
+
+
+def record_manual_verdict(session: Session, item_id: str, ok: bool) -> None:
+    """人工审核模式下把「通过/忽略」写进所属条件的匹配记录。
+
+    公开行情和价格观测都以 WatchMatch.ok 判定"已确认匹配"; 只改推荐状态的话,
+    人工通过的组在公开页仍然是空的。
+    """
+    if repo.get_config(session).review_enabled:
+        return
+    reason = MANUAL_APPROVED if ok else MANUAL_REJECTED
+    for match in session.scalars(select(WatchMatch).where(WatchMatch.item_id == item_id)):
+        match.ok = ok
+        match.reason = reason
+        repo.record_published_price(session, match)
+    repo.update_rec_verdict(session, item_id, ok, reason)
+    session.commit()
+
+
 _MUTE_FOREVER = datetime(9999, 12, 31)
 
 
@@ -220,4 +281,33 @@ def mute_recommendation(session: Session, item_id: str, days: int) -> None:
 
 
 def run_price_monitor(ctx, session: Session, settings: Settings) -> int:
-    return pipeline.run_monitor(ctx, session, settings)
+    return refresh_local_favorites(ctx, session, settings) + pipeline.run_monitor(ctx, session, settings)
+
+
+def refresh_local_favorites(ctx, session: Session, settings: Settings) -> int:
+    """独立读取站内收藏的详情价。按上次尝试时间轮转，错误不会覆盖上次结果。"""
+    drops = 0
+    entries = repo.due_local_favorites(session, max(settings.favorites_minutes, 1),
+                                      max(settings.liveness_max_checks, 0))
+    for row in entries:
+        price, dead = _liveness_mod.check_detail_price(ctx, row.item_id)
+        row.detail_checked_at = repo._now()
+        previous = row.latest_price
+        if dead:
+            repo.mark_dead(session, row.item_id, "详情已失效")
+            repo.add_event(session, row.item_id, "sold", {
+                "title": row.title, "url": row.url, "pic": row.pic_url, "reason": "详情已失效",
+            })
+        elif price is not None:
+            repo.record_local_price(session, row, price)
+            drop = detect_drop(row.item_id, previous, price, settings.min_drop_pct, settings.min_drop_abs)
+            if drop:
+                repo.add_event(session, row.item_id, "price_drop", {
+                    "title": row.title, "url": row.url, "pic": row.pic_url,
+                    "reason": "站内收藏详情复检", "prev_price": drop.prev_price, "curr_price": drop.curr_price,
+                    "drop_abs": drop.drop_abs, "drop_pct": drop.drop_pct,
+                })
+                drops += 1
+        else:
+            session.commit()
+    return drops

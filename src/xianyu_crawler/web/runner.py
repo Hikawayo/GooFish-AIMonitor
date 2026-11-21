@@ -15,7 +15,6 @@ from ..storage import repo
 from . import runtime, account
 
 _LOCK = threading.Lock()
-STATE: dict = {"running": False, "last": None}
 
 
 def _now_iso() -> str:
@@ -47,13 +46,19 @@ def crawl(watch_name: str | None = None) -> dict:
     指定条件名 → 只搜该条件(不刷收藏/不核活)。锁忙则跳过(防重入)。"""
     if not _LOCK.acquire(blocking=False):
         return {"skipped": "busy"}
-    STATE["running"] = True
+    runtime.job_state()["running"] = True
+    s = None
     try:
         s = runtime.session()
         cfg = repo.get_config(s)
         if cfg.paused:
             return {"skipped": "paused"}
-        settings = service.effective_settings(cfg)
+        settings = runtime.effective_settings(cfg)
+        blocked = runtime.search_block_reason(settings)
+        if blocked:
+            result = {"error": blocked, "at": _now_iso()}
+            runtime.job_state()["last"] = result
+            return result
         watches = [service.watchrow_to_watch(w) for w in repo.list_watches(s)]
         if watch_name:                           # 只跑指定条件
             watches = [w for w in watches if w.name == watch_name]
@@ -101,9 +106,11 @@ def crawl(watch_name: str | None = None) -> dict:
     except Exception as e:  # noqa: BLE001 - 后台作业, 记录不抛
         result = {"error": str(e), "at": _now_iso()}
     finally:
-        STATE["running"] = False
+        if s is not None:
+            s.close()
+        runtime.job_state()["running"] = False
         _LOCK.release()
-    STATE["last"] = result
+    runtime.job_state()["last"] = result
     return result
 
 
@@ -113,13 +120,16 @@ def refresh_favorites() -> dict:
     """
     if not _LOCK.acquire(blocking=False):
         return {"skipped": "busy"}
-    STATE["running"] = True
+    runtime.job_state()["running"] = True
+    s = None
     try:
         s = runtime.session()
         cfg = repo.get_config(s)
         if cfg.paused:
             return {"skipped": "paused"}
-        settings = service.effective_settings(cfg)
+        settings = runtime.effective_settings(cfg)
+        if runtime.shared_mode() and not runtime.has_login():
+            return {"skipped": "login_required"}
         with browser_session(settings) as ctx:
             drops = service.run_price_monitor(ctx, s, settings)
         notified = _notify(s, settings)
@@ -127,22 +137,7 @@ def refresh_favorites() -> dict:
     except Exception as e:  # noqa: BLE001 - 后台作业, 记录不抛
         return {"error": str(e), "at": _now_iso()}
     finally:
-        STATE["running"] = False
-        _LOCK.release()
-
-
-def approve(item_id: str) -> bool:
-    """批准一个推荐 → 在闲鱼点"收藏"。等待锁(最多 180s)。"""
-    if not _LOCK.acquire(timeout=180):
-        return False
-    STATE["running"] = True
-    try:
-        s = runtime.session()
-        settings = service.effective_settings(repo.get_config(s))
-        with browser_session(settings) as ctx:
-            return service.approve_recommendation(ctx, s, settings, item_id)
-    except Exception:
-        return False
-    finally:
-        STATE["running"] = False
+        if s is not None:
+            s.close()
+        runtime.job_state()["running"] = False
         _LOCK.release()

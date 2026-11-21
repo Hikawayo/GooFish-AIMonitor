@@ -33,10 +33,10 @@ export function EmptyState({ title, sub }) {
   )
 }
 
-export function Toggle({ checked, onChange, label }) {
+export function Toggle({ checked, onChange, label, ariaLabel }) {
   return (
     <label className="toggle">
-      <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" checked={!!checked} aria-label={ariaLabel} onChange={(e) => onChange(e.target.checked)} />
       <span className="track" />
       {label && <span className="tog-label">{label}</span>}
     </label>

@@ -14,15 +14,21 @@ const blank = () => ({
   requirement: '',
   free_shipping: false,
   enabled: true,
+  public: false,
+  folderId: '',
 })
 
 export default function Watches() {
   const [list, setList] = useState(null)
   const [form, setForm] = useState(blank())
+  const [folders, setFolders] = useState([])
+  const [folderName, setFolderName] = useState('')
+  const [error, setError] = useState('')
 
   const load = () => api.watches().then(setList)
   useEffect(() => {
-    load()
+    load().catch((error) => setError(error.message))
+    api.folders().then(setFolders).catch((error) => setError(error.message))
   }, [])
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
@@ -39,11 +45,30 @@ export default function Watches() {
       requirement: form.requirement.trim() || null,
       free_shipping: form.free_shipping || null,
       enabled: form.enabled,
+      public: form.public,
+      folder_id: form.folderId === '' ? null : Number(form.folderId),
     }
-    if (form.id) await api.updateWatch(form.id, body)
-    else await api.createWatch(body)
-    setForm(blank())
-    load()
+    try {
+      if (form.id) await api.updateWatch(form.id, body)
+      else await api.createWatch(body)
+      setForm(blank())
+      setError('')
+      await load()
+    } catch (error) {
+      setError(error.message)
+    }
+  }
+
+  const createFolder = async () => {
+    try {
+      const folder = await api.createFolder(folderName)
+      setFolders(await api.folders())
+      set('folderId', String(folder.id))
+      setFolderName('')
+      setError('')
+    } catch (error) {
+      setError(error.message)
+    }
   }
 
   const edit = (w) =>
@@ -58,6 +83,8 @@ export default function Watches() {
       requirement: w.requirement ?? '',
       free_shipping: !!w.free_shipping,
       enabled: w.enabled,
+      public: w.public,
+      folderId: w.folder_id == null ? '' : String(w.folder_id),
     })
 
   const toggleEnabled = async (w) => {
@@ -71,6 +98,8 @@ export default function Watches() {
       requirement: w.requirement,
       free_shipping: w.free_shipping,
       enabled: !w.enabled,
+      public: w.public,
+      folder_id: w.folder_id,
     })
     load()
   }
@@ -85,7 +114,7 @@ export default function Watches() {
   return (
     <section>
       <h1 className="page-title">监控条件</h1>
-      <p className="page-sub">关键词与价格范围等，定时按这些条件搜索并推荐。</p>
+      {error && <p role="alert" className="test-err">{error}</p>}
 
       <Card className="form-card">
         <div className="form-title">{form.id ? '编辑条件' : '新增条件'}</div>
@@ -93,7 +122,7 @@ export default function Watches() {
           <Field label="名称">
             <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="iPhone15Pro" />
           </Field>
-          <Field label="搜索词" hint="整体作为一条搜索词去搜（空格分隔），不是逐词分搜">
+          <Field label="搜索词" hint="所有词会合成一次搜索">
             <input
               value={form.keywordsText}
               onChange={(e) => set('keywordsText', e.target.value)}
@@ -109,7 +138,19 @@ export default function Watches() {
           <Field label="城市（可选）">
             <input value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="上海" />
           </Field>
-          <Field label="成色（逗号分隔，可选）">
+          <Field label="文件夹">
+            <select value={form.folderId} onChange={(e) => set('folderId', e.target.value)}>
+              <option value="">使用条件名称</option>
+              {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+            </select>
+          </Field>
+          <Field label="可见性">
+            <select value={form.public ? 'public' : 'private'} onChange={(e) => set('public', e.target.value === 'public')}>
+              <option value="private">私密 · 仅自己</option>
+              <option value="public">公开 · 本站登录用户</option>
+            </select>
+          </Field>
+          <Field label="成色（用逗号分隔）">
             <input
               value={form.conditionText}
               onChange={(e) => set('conditionText', e.target.value)}
@@ -117,17 +158,20 @@ export default function Watches() {
             />
           </Field>
         </div>
+        <div className="form-row">
+          <Field label="新建文件夹">
+            <input value={folderName} maxLength={80} onChange={(e) => setFolderName(e.target.value)} />
+          </Field>
+          <Button variant="ghost" disabled={!folderName.trim()} onClick={createFolder}>添加文件夹</Button>
+        </div>
         <div className="req-field">
-          <Field
-            label="AI 审核要求（自然语言，可选）"
-            hint="定时搜索命中后，交给大模型按这段要求二次筛选；不符合的不会进推荐。"
-          >
+          <Field label="AI 审核要求（可选）">
             <textarea
               className="req-input"
               rows={3}
               value={form.requirement}
               onChange={(e) => set('requirement', e.target.value)}
-              placeholder="例：只要 14 寸 M5 Pro 国行本机，48G 以上，成色 95 新以上，价格不超过 19000，排除 16 寸 / Max 芯片 / 未拆封全新 / 配件 / 维修"
+              placeholder="例如：只要 14 寸 M5 Pro 本机，排除配件"
             />
           </Field>
         </div>
@@ -145,18 +189,17 @@ export default function Watches() {
       </Card>
 
       {list.length === 0 ? (
-        <EmptyState title="还没有监控条件" sub="在上面添加一个，定时任务就会开始找货" />
+        <EmptyState title="还没有监控条件" />
       ) : (
         <div className="watch-list">
           {list.map((w) => (
             <Card key={w.id} className="watch-row">
               <div className="watch-main">
-                <div className="watch-name">
-                  {w.name}
-                  {!w.enabled && <span className="muted-tag">已停用</span>}
-                </div>
+                <div className="watch-name">{w.name}</div>
                 <div className="watch-kw">{(w.keywords || []).join(' · ')}</div>
                 <div className="rec-meta">
+                  {folders.find((folder) => folder.id === w.folder_id)?.name}
+                  <span>{w.public ? '公开' : '私密'}</span>
                   {(w.price_min || w.price_max) && (
                     <span>
                       ¥{w.price_min ?? 0} – {w.price_max ?? '∞'}
@@ -169,14 +212,14 @@ export default function Watches() {
                   ))}
                 </div>
                 {w.requirement && (
-                  <div className="watch-req">
-                    <span className="watch-req-tag">AI</span>
-                    {w.requirement}
-                  </div>
+                  <details className="watch-req">
+                    <summary>AI 审核要求</summary>
+                    <p>{w.requirement}</p>
+                  </details>
                 )}
               </div>
               <div className="watch-actions">
-                <Toggle checked={w.enabled} onChange={() => toggleEnabled(w)} />
+                <Toggle checked={w.enabled} onChange={() => toggleEnabled(w)} ariaLabel={`启用 ${w.name}`} />
                 <Button variant="ghost" className="btn-sm" onClick={() => edit(w)}>
                   编辑
                 </Button>

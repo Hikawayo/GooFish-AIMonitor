@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { Card, Button, Badge, Spinner, EmptyState, Thumb, TimeMeta } from '../components/ui'
 import { yuan, fmtDate, fmtDateTime, ago } from '../util'
+import Folders, { ownFolders, useFolders } from '../components/Folders'
+import ItemSort, { sortItems } from '../components/ItemSort'
+import PriceHistory from '../components/PriceHistory'
+
+const REVIEW_NOT_RUN = "(审核未运行)"
 
 export default function Recommendations({ refreshKey, onToast }) {
   const [items, setItems] = useState(null)
@@ -9,11 +14,19 @@ export default function Recommendations({ refreshKey, onToast }) {
   const [muteOpen, setMuteOpen] = useState(null)
   const [onlyPassed, setOnlyPassed] = useState(true) // 默认只看 LLM 通过的
   const [reviewing, setReviewing] = useState(false)
+  const [cfg, setCfg] = useState(null)               // 人工审核模式(关闭 AI 审核)没有 AI 筛选项
+  const [visibility, setVisibility] = useState('mine')
+  const [folderId, setFolderId] = useState('')
+  const [sortOrder, setSortOrder] = useState('published-desc')
+  const { watches, folders, shared, error } = useFolders(refreshKey, visibility)
 
   const load = () => api.recommendations('new').then(setItems)
   useEffect(() => {
-    load()
+    load().catch((error) => onToast?.(error.message))
   }, [refreshKey])
+  useEffect(() => {
+    api.config().then(setCfg).catch(() => {})
+  }, [])
 
   // 一键 AI 审核: 用当前 LLM 配置对已入库的待审推荐补审(不重新抓取)
   const reviewAll = async () => {
@@ -29,6 +42,8 @@ export default function Recommendations({ refreshKey, onToast }) {
         onToast?.(parts.join(' · '))
         await load()
       }
+    } catch (error) {
+      onToast?.(error.message)
     } finally {
       setReviewing(false)
     }
@@ -39,10 +54,12 @@ export default function Recommendations({ refreshKey, onToast }) {
     try {
       const r = await fn(id)
       if (r && r.ok === false) {                 // 收藏没真成功 → 保留卡片 + 提示, 不再假装成功
-        onToast?.('收藏没成功（可能遇到验证或网络波动），卡片已保留，可稍后重试')
+        onToast?.('操作失败，商品已保留，可稍后重试')
         return
       }
       setItems((xs) => xs.filter((x) => x.item_id !== id))
+    } catch (error) {
+      onToast?.(error.message)
     } finally {
       setBusy((b) => ({ ...b, [id]: false }))
     }
@@ -55,6 +72,7 @@ export default function Recommendations({ refreshKey, onToast }) {
 
   const renderCard = (it) => {
     const failed = it.rec_ok === false
+    const notRun = it.reason === REVIEW_NOT_RUN
     return (
     <Card key={it.item_id} className={`rec${it.dead ? ' dead' : ''}${failed ? ' failed' : ''}`}>
       <Thumb url={it.pic_url} dead={it.dead} deadReason={it.dead_reason} />
@@ -62,8 +80,9 @@ export default function Recommendations({ refreshKey, onToast }) {
         <a className="rec-title" href={it.url} target="_blank" rel="noreferrer">
           {it.title}
         </a>
-        <div className="rec-price">{yuan(it.price)}</div>
+        <div className="rec-price-row"><div className="rec-price">{yuan(it.price)}</div><PriceHistory item={it} /></div>
         <div className="rec-meta">
+          {it.seller_nick && <span>卖家 {it.seller_nick}</span>}
           {it.location && <span>{it.location}</span>}
           {it.condition && <span>{it.condition}</span>}
           {it.free_shipping && <Badge>包邮</Badge>}
@@ -76,9 +95,8 @@ export default function Recommendations({ refreshKey, onToast }) {
           </div>
         )}
         {it.reason && (
-          <div className={`rec-reason${failed ? ' rejected' : ''}`}>
-            <span className="rec-reason-tag">{failed ? '未通过' : 'AI'}</span>
-            <span>{it.reason}</span>
+          <div className={`rec-reason${notRun ? ' pending' : failed ? ' rejected' : ''}`}>
+            {notRun ? 'AI 审核未完成' : it.reason}
           </div>
         )}
         <TimeMeta
@@ -91,7 +109,7 @@ export default function Recommendations({ refreshKey, onToast }) {
         <div className="rec-actions">
           {!it.dead && (
             <Button disabled={busy[it.item_id]} onClick={() => act(it.item_id, api.approve)}>
-              {busy[it.item_id] ? '收藏中…' : '收藏'}
+              {busy[it.item_id] ? '收藏中…' : '站内收藏'}
             </Button>
           )}
           <Button
@@ -127,35 +145,54 @@ export default function Recommendations({ refreshKey, onToast }) {
 
   if (items === null) return <Spinner />
 
-  const passedCount = items.filter((x) => x.rec_ok !== false).length
-  const shown = onlyPassed ? items.filter((x) => x.rec_ok !== false) : items
+  const isPublic = visibility === 'public'
+  const choices = isPublic ? shared : ownFolders(watches, folders, visibility)
+  const selected = choices.find((folder) => folder.id === folderId) ?? choices[0]
+  const source = isPublic ? [] : items.flatMap((item) => {
+    const matches = item.watch_matches ?? []
+    if (selected?.id === 'ungrouped') return matches.length ? [] : [item]
+    const inFolder = matches.filter((match) => selected?.watches.includes(match.watch_id))
+    const match = inFolder.find((entry) => entry.rec_ok === true && entry.reason !== REVIEW_NOT_RUN)
+      ?? inFolder[0]
+    return match ? [{ ...item, ...match }] : []
+  })
+  const passed = source.filter((item) => item.rec_ok === true && item.reason !== REVIEW_NOT_RUN)
+  const manual = cfg?.review_enabled === false     // 关掉 AI 审核 → 全部候选都由本人裁决
+  const shown = sortItems(manual || !onlyPassed ? source : passed, sortOrder)
 
-  // 按监控条件(watch)分组, 保持原有顺序(死链末尾 / 新推荐在前)
-  const order = []
-  const byWatch = {}
-  for (const it of shown) {
-    const k = it.watch_name || '未分组'
-    if (!byWatch[k]) {
-      byWatch[k] = []
-      order.push(k)
+  const sharedFavorite = async (item) => {
+    const key = `shared:${item.item_id}`
+    setBusy((state) => ({ ...state, [key]: true }))
+    try {
+      const r = await api.favoriteShared(selected.id, item.item_id)
+      onToast?.(r.ok ? '已站内收藏' : '收藏失败，请稍后重试')
+    } catch (error) {
+      onToast?.(error.message)
+    } finally {
+      setBusy((state) => ({ ...state, [key]: false }))
     }
-    byWatch[k].push(it)
   }
 
   return (
     <section>
-      <h1 className="page-title">
-        待审推荐 {shown.length > 0 && <span className="count">{shown.length}</span>}
-      </h1>
-      <p className="page-sub">定时发现你没见过的商品，你来决定收藏或忽略。按监控条件分组。</p>
-      {items.length > 0 && (
+      <h1 className="page-title">待审推荐</h1>
+      {error && <p role="alert" className="test-err">{error}</p>}
+      <div className="folder-layout">
+        <Folders choices={choices} selected={selected?.id} onSelect={setFolderId}
+          visibility={visibility} onVisibility={setVisibility} />
+        <div className="folder-results">
+      {selected && <div className="folder-heading">
+        <h2>{selected.name}</h2>
+        <ItemSort value={sortOrder} onChange={setSortOrder} />
+      </div>}
+      {!isPublic && !manual && source.length > 0 && (
         <div className="rec-toolbar">
           <div className="rec-filter">
-            <button className={`seg${onlyPassed ? ' on' : ''}`} onClick={() => setOnlyPassed(true)}>
-              仅 LLM 通过 <b>{passedCount}</b>
+            <button className={`seg${onlyPassed ? ' on' : ''}`} aria-pressed={onlyPassed} onClick={() => setOnlyPassed(true)}>
+              AI 通过 <b>{passed.length}</b>
             </button>
-            <button className={`seg${!onlyPassed ? ' on' : ''}`} onClick={() => setOnlyPassed(false)}>
-              全部 <b>{items.length}</b>
+            <button className={`seg${!onlyPassed ? ' on' : ''}`} aria-pressed={!onlyPassed} onClick={() => setOnlyPassed(false)}>
+              全部 <b>{source.length}</b>
             </button>
           </div>
           <Button variant="ghost" disabled={reviewing} onClick={reviewAll}>
@@ -163,26 +200,36 @@ export default function Recommendations({ refreshKey, onToast }) {
           </Button>
         </div>
       )}
-      {shown.length === 0 ? (
+      {isPublic ? (
+        selected?.items.length ? (
+          <div className="grid">
+            {sortItems(selected.items, sortOrder).map((item) => (
+              <Card key={item.item_id} className="rec">
+                <Thumb url={item.pic_url} />
+                <div className="rec-body">
+                  <a className="rec-title" href={item.url} target="_blank" rel="noreferrer">{item.title}</a>
+                  <div className="rec-price-row"><div className="rec-price">{yuan(item.price)}</div>
+                    <PriceHistory item={item} folder={selected.id} />
+                  </div>
+                  {item.seller_nick && <div className="rec-meta">卖家 {item.seller_nick}</div>}
+                  <TimeMeta items={[['上架', ago(item.publish_time)], ['观测', fmtDateTime(item.observed_at)]]} />
+                  <Button disabled={busy[`shared:${item.item_id}`]} onClick={() => sharedFavorite(item)}>
+                    站内收藏
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : <EmptyState title="暂无公开商品" />
+      ) : shown.length === 0 ? (
         <EmptyState
-          title={onlyPassed && items.length > 0 ? '本轮没有 LLM 通过的' : '暂无新推荐'}
-          sub={
-            onlyPassed && items.length > 0
-              ? `有 ${items.length} 条候选未通过审核，点「全部」查看原因`
-              : '定时任务会按你的条件自动发现新商品'
-          }
+          title={!manual && onlyPassed && source.length > 0 ? '暂无 AI 通过的推荐' : '暂无新推荐'}
         />
       ) : (
-        order.map((name) => (
-          <div key={name} className="rec-group">
-            <div className="rec-group-head">
-              <span className="rec-group-name">{name}</span>
-              <span className="rec-group-count">{byWatch[name].length}</span>
-            </div>
-            <div className="grid">{byWatch[name].map(renderCard)}</div>
-          </div>
-        ))
+        <div className="grid">{shown.map(renderCard)}</div>
       )}
+        </div>
+      </div>
     </section>
   )
 }

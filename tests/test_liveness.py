@@ -10,6 +10,7 @@ def test_extract_stats_from_item_do():
 def test_extract_stats_handles_string_numbers():
     detail = {"data": {"itemDO": {"browseCnt": "200", "wantCnt": "7"}}}
     s = _extract_stats(detail)
+    assert s is not None
     assert s["browse_count"] == 200 and s["want_count"] == 7 and s["collect_count"] is None
 
 

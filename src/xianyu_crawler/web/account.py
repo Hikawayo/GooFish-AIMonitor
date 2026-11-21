@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import json
 
-from ..config import Settings
+from . import runtime
 
 # 淘宝/闲鱼默认灰头像标记: 命中即视为"未设头像", 不展示
 _DEFAULT_MARKERS = ("TB1LFGeKVXXXXbCaXXX07tlTXXX",)
 
 
 def _path():
-    return Settings().data_dir / "account.json"
+    return runtime.data_dir() / "account.json"
 
 
 def save(avatar_url: str | None) -> None:

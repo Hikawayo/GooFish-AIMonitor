@@ -21,7 +21,14 @@ COLUMNS: list[tuple[str, str, str]] = [
     ("items", "want_count", "INTEGER"),
     ("items", "browse_count", "INTEGER"),
     ("items", "collect_count", "INTEGER"),
+    ("items", "shared_folder_key", "TEXT"),
+    ("items", "local_saved", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("items", "detail_checked_at", "DATETIME"),
     ("watches", "requirement", "TEXT"),
+    ("watches", "public", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("watches", "folder_id", "INTEGER REFERENCES watch_folders(id)"),
+    ("watch_matches", "title", "TEXT"),
+    ("watch_matches", "url", "TEXT"),
     ("app_config", "review_model", "TEXT NOT NULL DEFAULT 'doubao-seed-2.0-pro'"),
     ("app_config", "favorites_minutes", "INTEGER NOT NULL DEFAULT 30"),
     ("app_config", "review_enabled", "BOOLEAN NOT NULL DEFAULT 1"),
@@ -66,6 +73,28 @@ def ensure_columns(db_path: str | Path) -> int:
                 continue
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
             added += 1
+        if _cols(con, "watch_matches"):
+            con.execute("""
+                INSERT OR IGNORE INTO watch_matches
+                    (watch_id, item_id, ok, reason, title, url, price, observed_at)
+                SELECT w.id, i.item_id, i.rec_ok, i.rec_reason, i.title, i.url, i.latest_price, i.last_seen_at
+                FROM watches w JOIN items i ON i.watch_name = w.name
+                WHERE i.rec_reason IS NOT NULL OR i.rec_ok IS NOT NULL
+            """)
+            if _cols(con, "published_prices"):
+                con.execute("""
+                    INSERT INTO published_prices (watch_id, item_id, price, observed_at)
+                    SELECT w.id, m.item_id, m.price, CURRENT_TIMESTAMP
+                    FROM watches w JOIN watch_matches m ON m.watch_id = w.id
+                    JOIN items i ON i.item_id = m.item_id
+                    WHERE w.public = 1 AND m.ok = 1
+                      AND (m.reason IS NULL OR m.reason != '(审核未运行)')
+                      AND (w.requirement IS NULL OR w.requirement = '' OR m.reason IS NOT NULL)
+                      AND (i.rec_status IS NULL OR i.rec_status != 'rejected')
+                      AND i.dead = 0 AND (i.muted_until IS NULL OR i.muted_until <= CURRENT_TIMESTAMP)
+                      AND NOT EXISTS (SELECT 1 FROM published_prices p
+                          WHERE p.watch_id = w.id AND p.item_id = m.item_id)
+                """)
         con.commit()
     finally:
         con.close()

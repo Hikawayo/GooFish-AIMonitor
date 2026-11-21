@@ -9,6 +9,10 @@
 """
 from __future__ import annotations
 
+from math import isfinite
+
+from .parsing import to_price
+
 DETAIL_API = "mtop.taobao.idle.pc.detail"
 _DEAD_MARKERS = ("ITEM_DEL", "不存在", "已被删除", "已删除", "已下架", "下架", "ITEM_NOT_FOUND")
 _ITEM_URL = "https://www.goofish.com/item?id={}"
@@ -38,9 +42,9 @@ def _extract_stats(detail: dict | None) -> dict | None:
     return stats if any(v is not None for v in stats.values()) else None
 
 
-def check_liveness(ctx, item_id: str, wait_ms: int = 2500) -> tuple[bool, str | None, dict | None]:
-    """返回 (dead, reason, stats)。stats={browse_count,collect_count,want_count} 或 None。
-    打开详情页本就为核活, 顺带把这三个计数取回(不额外开页)。拿不到明确死亡信号即判活。"""
+def _read_detail(ctx, item_id: str, wait_ms: int) -> dict | None:
+    if not item_id.isascii() or not item_id.isdecimal():
+        return None
     page = ctx.new_page()
     captured: dict = {"json": None}
 
@@ -53,14 +57,19 @@ def check_liveness(ctx, item_id: str, wait_ms: int = 2500) -> tuple[bool, str | 
 
     page.on("response", _on_response)
     try:
-        page.goto(_ITEM_URL.format(item_id), wait_until="domcontentloaded")
+        page.goto(_ITEM_URL.format(item_id), wait_until="domcontentloaded", timeout=15_000)
         page.wait_for_timeout(wait_ms)
     except Exception:
-        return False, None, None    # 打开失败 → 不判死, 无计数
+        return None
     finally:
         page.close()
 
-    detail = captured["json"]
+    return captured["json"]
+
+
+def check_liveness(ctx, item_id: str, wait_ms: int = 2500) -> tuple[bool, str | None, dict | None]:
+    """打开详情页核活并读取互动次数。拿不到明确下架信号时保持原状态。"""
+    detail = _read_detail(ctx, item_id, wait_ms)
     stats = _extract_stats(detail)
     blob = _ret_blob((detail or {}).get("ret"))
     if "SUCCESS" in blob:
@@ -68,3 +77,21 @@ def check_liveness(ctx, item_id: str, wait_ms: int = 2500) -> tuple[bool, str | 
     if any(m in blob for m in _DEAD_MARKERS):
         return True, "已删除", stats
     return False, None, stats        # 不确定 → 保守判活
+
+
+def parse_detail_price(detail: dict | None, item_id: str) -> tuple[float | None, bool]:
+    """返回当前挂牌价和明确失效标记。未知结果保留原价及原状态。"""
+    if not detail:
+        return None, False
+    blob = _ret_blob(detail.get("ret"))
+    if "SUCCESS" not in blob:
+        return None, any(marker in blob for marker in _DEAD_MARKERS)
+    item = (detail.get("data") or {}).get("itemDO") or {}
+    if str(item.get("itemId")) != item_id:
+        return None, False
+    price = to_price(item.get("soldPrice"))
+    return (price if price is not None and isfinite(price) and price > 0 else None), False
+
+
+def check_detail_price(ctx, item_id: str) -> tuple[float | None, bool]:
+    return parse_detail_price(_read_detail(ctx, item_id, 2500), item_id)

@@ -11,11 +11,15 @@ from __future__ import annotations
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import runner
+from . import runner, runtime
+from ..storage import repo
 
 _scheduler: BackgroundScheduler | None = None
-_CRAWL_JOB = "crawl"
-_FAV_JOB = "favorites"
+
+
+def _run_for_scope(user_scope: str, favorites: bool) -> None:
+    with runtime.use_scope(user_scope):
+        (runner.refresh_favorites if favorites else runner.crawl)()
 
 
 def start(crawl_minutes: int, favorites_minutes: int) -> None:
@@ -23,18 +27,29 @@ def start(crawl_minutes: int, favorites_minutes: int) -> None:
     if _scheduler is not None:
         return
     _scheduler = BackgroundScheduler()
-    _scheduler.add_job(runner.crawl, IntervalTrigger(minutes=max(1, crawl_minutes)),
-                       id=_CRAWL_JOB, max_instances=1, coalesce=True)
-    _scheduler.add_job(runner.refresh_favorites, IntervalTrigger(minutes=max(1, favorites_minutes)),
-                       id=_FAV_JOB, max_instances=1, coalesce=True)
+    reschedule(crawl_minutes, favorites_minutes)
+    if runtime.shared_mode():
+        for user_scope in runtime.scopes():
+            if user_scope != runtime.OWNER:
+                with runtime.use_scope(user_scope), runtime.session() as db:
+                    cfg = repo.get_config(db)
+                    reschedule(cfg.schedule_minutes, cfg.favorites_minutes)
     _scheduler.start()
 
 
 def reschedule(crawl_minutes: int, favorites_minutes: int) -> None:
     if _scheduler is None:
         return
-    _scheduler.reschedule_job(_CRAWL_JOB, trigger=IntervalTrigger(minutes=max(1, crawl_minutes)))
-    _scheduler.reschedule_job(_FAV_JOB, trigger=IntervalTrigger(minutes=max(1, favorites_minutes)))
+    user_scope = runtime.scope()
+    for name, minutes in (("crawl", crawl_minutes), ("favorites", favorites_minutes)):
+        _scheduler.add_job(_run_for_scope, IntervalTrigger(minutes=max(1, minutes)),
+                           args=(user_scope, name == "favorites"), id=f"{user_scope}:{name}",
+                           max_instances=1, coalesce=True, replace_existing=True)
+
+
+def ensure_scheduled(crawl_minutes: int, favorites_minutes: int) -> None:
+    if _scheduler is not None and _scheduler.get_job(f"{runtime.scope()}:favorites") is None:
+        reschedule(crawl_minutes, favorites_minutes)
 
 
 def shutdown() -> None:

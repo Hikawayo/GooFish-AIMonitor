@@ -23,6 +23,7 @@ DEFAULT_REVIEW_SYSTEM_PROMPT = (
 
 
 class Watch(BaseModel):
+    id: int | None = None
     name: str
     keywords: list[str]
     price_min: float | None = None
@@ -47,6 +48,9 @@ class Settings(BaseSettings):
         env_prefix="XIANYU_", env_file=_LOCAL_ENV_FILES, extra="ignore"
     )
     data_dir: Path = _DEFAULT_DATA_DIR
+    sso_enabled: bool = False
+    sso_owner_scope: str = ""
+    member_review_urls: str = "https://api.openai.com/v1,https://api.deepseek.com,https://api.deepseek.com/v1"
     min_drop_pct: float = 5.0
     min_drop_abs: float = 50.0
     headless: bool = False
@@ -56,6 +60,7 @@ class Settings(BaseSettings):
     favorites_url: str = "https://www.goofish.com/collection"
     search_max_pages: int = 3
     favorites_max_pages: int = 5
+    favorites_minutes: int = 30
     # 二次审核(LLM 相关性过滤) — 任意 OpenAI 兼容接口。
     # 具体接口地址/密钥放本地 data/secret.env(XIANYU_REVIEW_BASE_URL / XIANYU_REVIEW_API_TOKEN),
     # 不写进仓库; 这里只给通用占位默认。

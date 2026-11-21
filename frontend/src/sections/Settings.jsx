@@ -4,6 +4,8 @@ import { Card, Button, Spinner, Toggle, Field, ConfirmDialog } from '../componen
 
 export default function Settings({ status }) {
   const [cfg, setCfg] = useState(null)
+  const [access, setAccess] = useState(null)
+  const [saveError, setSaveError] = useState('')
   const [saved, setSaved] = useState(false)
   const [pwd, setPwd] = useState('') // SMTP 密码单独管理: 只在用户输入时才提交
   const [token, setToken] = useState('') // LLM token 同理(只写)
@@ -17,6 +19,7 @@ export default function Settings({ status }) {
 
   useEffect(() => {
     api.config().then(setCfg)
+    api.access().then(setAccess).catch((error) => setSaveError(error.message))
     api.loginStatus().then(setLogin)
     return () => clearInterval(loginTimer.current)
   }, [])
@@ -44,12 +47,17 @@ export default function Settings({ status }) {
   })
 
   const save = async () => {
-    const next = await api.saveConfig(payload())
-    setCfg(next)
-    setPwd('')
-    setToken('')
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    try {
+      const next = await api.saveConfig(payload())
+      setCfg(next)
+      setPwd('')
+      setToken('')
+      setSaved(true)
+      setSaveError('')
+      setTimeout(() => setSaved(false), 2000)
+    } catch (error) {
+      setSaveError(error.message)
+    }
   }
 
   const test = async () => {
@@ -80,6 +88,8 @@ export default function Settings({ status }) {
           : { ok: false, text: r.error },
       )
       api.config().then(setCfg)
+    } catch (error) {
+      setLlmMsg({ ok: false, text: error.message })
     } finally {
       setLlmTesting(false)
     }
@@ -100,13 +110,15 @@ export default function Settings({ status }) {
 
   return (
     <section>
-      <h1 className="page-title">设置</h1>
+      <div className="settings-header">
+        <h1 className="page-title">设置</h1>
+        {saved && <span className="saved-hint" role="status">已保存</span>}
+        <Button onClick={save}>保存设置</Button>
+      </div>
+      {saveError && <p role="alert" className="test-err">{saveError}</p>}
 
       <Card className="form-card">
-        <div className="form-title">闲鱼登录</div>
-        <p className="form-hint">
-          首次使用或登录过期时点这里扫码（手机「闲鱼」App → 我的 → 右上角「扫一扫」）。登录态保存在本地，容器重启不丢。
-        </p>
+        <h2 className="form-title">闲鱼登录</h2>
         {loggingIn ? (
           <div className="qr-wrap">
             <div className="spinner" />
@@ -149,38 +161,35 @@ export default function Settings({ status }) {
       </Card>
 
       <Card className="form-card">
-        <div className="form-title">定时与阈值</div>
+        <h2 className="form-title">定时与阈值</h2>
         <div className="form-grid">
-          <Field label="推荐抓取间隔（分钟）" hint="搜索发现新商品的周期">
+          <Field label="推荐抓取间隔（分钟）">
             <input
               type="number"
               value={cfg.schedule_minutes}
               onChange={(e) => set('schedule_minutes', Number(e.target.value))}
             />
           </Field>
-          <Field label="收藏刷新间隔（分钟）" hint="独立定时: 刷新收藏价格/降价/死链">
+          <Field label="收藏刷新间隔（分钟）">
             <input
               type="number"
               value={cfg.favorites_minutes}
               onChange={(e) => set('favorites_minutes', Number(e.target.value))}
             />
           </Field>
-          <Field label="降价阈值（百分比 %）">
+          <Field label="降价阈值（%）">
             <input
               type="number"
               value={cfg.min_drop_pct}
               onChange={(e) => set('min_drop_pct', Number(e.target.value))}
             />
           </Field>
-          <Field label="降价阈值（金额 ¥）">
+          <Field label="降价阈值（¥）">
             <input
               type="number"
               value={cfg.min_drop_abs}
               onChange={(e) => set('min_drop_abs', Number(e.target.value))}
             />
-          </Field>
-          <Field label="收件邮箱">
-            <input value={cfg.notify_to} onChange={(e) => set('notify_to', e.target.value)} />
           </Field>
           <Field label="搜索翻页上限">
             <input
@@ -199,27 +208,24 @@ export default function Settings({ status }) {
         </div>
         <div className="form-row">
           <Toggle checked={cfg.paused} onChange={(v) => set('paused', v)} label="暂停定时任务" />
-          <Toggle checked={cfg.headless} onChange={(v) => set('headless', v)} label="无头浏览器" />
-          <div className="grow" />
-          {saved && <span className="saved-hint">已保存</span>}
-          <Button onClick={save}>保存</Button>
+          {!access?.member && <Toggle checked={cfg.headless} onChange={(v) => set('headless', v)} label="无头浏览器" />}
         </div>
       </Card>
 
-      <Card className="form-card">
-        <div className="form-title">邮件通知（SMTP）</div>
-        <p className="form-hint">
-          收到降价 / 收藏变动时发邮件到上方「收件邮箱」。留空则回退系统环境变量。
-        </p>
+      {!access?.member && <Card className="form-card">
+        <h2 className="form-title">邮件通知（SMTP）</h2>
         <div className="form-grid">
-          <Field label="SMTP 服务器" hint="如 smtp.exmail.qq.com">
+          <Field label="收件邮箱">
+            <input value={cfg.notify_to} onChange={(e) => set('notify_to', e.target.value)} />
+          </Field>
+          <Field label="SMTP 服务器">
             <input
               value={cfg.smtp_host || ''}
               onChange={(e) => set('smtp_host', e.target.value)}
               placeholder="smtp.exmail.qq.com"
             />
           </Field>
-          <Field label="端口" hint="SSL 通常 465">
+          <Field label="端口">
             <input
               type="number"
               value={cfg.smtp_port ?? 465}
@@ -243,7 +249,6 @@ export default function Settings({ status }) {
           </Field>
         </div>
         <div className="req-field">
-          <span className="field-label">邮件提醒哪些事件</span>
           <div className="form-row">
             <Toggle checked={cfg.notify_on_new} onChange={(v) => set('notify_on_new', v)} label="发现新推荐" />
             <Toggle checked={cfg.notify_on_drop} onChange={(v) => set('notify_on_drop', v)} label="收藏降价" />
@@ -262,23 +267,22 @@ export default function Settings({ status }) {
           <Button variant="ghost" onClick={test} disabled={testing}>
             {testing ? '发送中…' : '发送测试邮件'}
           </Button>
-          <Button onClick={save}>保存</Button>
         </div>
-      </Card>
+      </Card>}
 
       <Card className="form-card">
-        <div className="form-title">AI 审核（LLM）</div>
-        <p className="form-hint">
-          搜索命中后交给大模型按每条监控条件的「AI 审核要求」二次筛选。任意 OpenAI 兼容接口。接口地址 /
-          密钥也可放本地 data/secret.env（XIANYU_REVIEW_BASE_URL / XIANYU_REVIEW_API_TOKEN），不入仓库。关闭则所有命中都直接进推荐。
-        </p>
+        <h2 className="form-title">AI 审核</h2>
         <div className="form-grid">
-          <Field label="接口地址" hint="OpenAI 兼容 base url；留空用本地 secret.env">
-            <input
+          <Field label="接口地址" hint="OpenAI 兼容地址，留空读取服务器配置">
+            {access?.member ? (
+              <select value={cfg.review_base_url || ''} onChange={(e) => set('review_base_url', e.target.value)}>
+                {access.review_urls.map((url) => <option key={url} value={url}>{url}</option>)}
+              </select>
+            ) : <input
               value={cfg.review_base_url || ''}
               onChange={(e) => set('review_base_url', e.target.value)}
               placeholder="https://api.openai.com/v1"
-            />
+            />}
           </Field>
           <Field label="模型">
             <input
@@ -305,7 +309,7 @@ export default function Settings({ status }) {
               onChange={(e) => set('review_timeout', Number(e.target.value))}
             />
           </Field>
-          <Field label="温度 temperature" hint="0 最确定">
+          <Field label="温度">
             <input
               type="number"
               step="0.1"
@@ -322,7 +326,7 @@ export default function Settings({ status }) {
           </Field>
         </div>
         <div className="req-field">
-          <Field label="系统提示词" hint="大模型的判定规则；留空恢复默认">
+          <Field label="系统提示词" hint="留空恢复默认">
             <textarea
               className="req-input"
               rows={4}
@@ -337,6 +341,7 @@ export default function Settings({ status }) {
             onChange={(v) => set('review_enabled', v)}
             label="启用 AI 审核"
           />
+          <span className="field-hint">关闭后不调用模型，候选全部留给本人审核，也不需要 API Key</span>
           {llmMsg && (
             <span className={llmMsg.ok ? 'test-ok' : 'test-err'}>
               {llmMsg.ok ? '✓ ' : '✗ '}
@@ -344,19 +349,16 @@ export default function Settings({ status }) {
             </span>
           )}
           <div className="grow" />
-          {saved && <span className="saved-hint">已保存</span>}
           <Button variant="ghost" onClick={testLLM} disabled={llmTesting}>
-            {llmTesting ? '测试中…' : '测试 LLM'}
+            {llmTesting ? '测试中…' : '测试 AI 审核'}
           </Button>
-          <Button onClick={save}>保存</Button>
         </div>
       </Card>
 
-      <Card className="form-card">
-        <div className="form-title">高级（抓取 / 反爬）</div>
-        <p className="form-hint">一般无需改动。闲鱼接口地址、操作随机延迟、死链核活上限。</p>
+      {!access?.member && <Card className="form-card">
+        <h2 className="form-title">高级抓取设置</h2>
         <div className="form-grid">
-          <Field label="操作延迟下限（秒）" hint="点击/收藏前随机等待">
+          <Field label="操作延迟下限（秒）">
             <input
               type="number"
               step="0.5"
@@ -372,7 +374,7 @@ export default function Settings({ status }) {
               onChange={(e) => set('action_delay_max', Number(e.target.value))}
             />
           </Field>
-          <Field label="死链核活上限（条/轮）" hint="每轮最多打开多少详情页核活">
+          <Field label="死链核活上限（条/轮）">
             <input
               type="number"
               value={cfg.liveness_max_checks}
@@ -389,15 +391,10 @@ export default function Settings({ status }) {
             />
           </Field>
         </div>
-        <div className="form-row">
-          <div className="grow" />
-          {saved && <span className="saved-hint">已保存</span>}
-          <Button onClick={save}>保存</Button>
-        </div>
-      </Card>
+      </Card>}
 
       <Card className="form-card">
-        <div className="form-title">运行状态</div>
+        <h2 className="form-title">运行状态</h2>
         <div className="status-grid">
           <div>
             <span className="status-k">当前</span>

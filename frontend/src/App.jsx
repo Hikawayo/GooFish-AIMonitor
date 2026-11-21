@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { api } from './api'
 import { yuan, fmtDateTime } from './util'
 import Recommendations from './sections/Recommendations'
@@ -9,9 +9,9 @@ import Settings from './sections/Settings'
 
 // 5 套大厂皮肤(色板用于顶栏选择器: bg + accent 双色圆点)
 const SKINS = [
-  { k: 'linear', name: 'Linear', bg: '#08090a', acc: '#7c87ff' },
+  { k: 'linear', name: 'Linear', bg: '#08090a', acc: '#00aabb' },
   { k: 'vercel', name: 'Vercel', bg: '#000000', acc: '#ededed' },
-  { k: 'stripe', name: 'Stripe', bg: '#f6f9fc', acc: '#635bff' },
+  { k: 'stripe', name: 'Stripe', bg: '#f6f9fc', acc: '#00aabb' },
   { k: 'supabase', name: 'Supabase', bg: '#1d1d1d', acc: '#3ecf8e' },
   { k: 'apple', name: 'Apple', bg: '#f5f5f7', acc: '#0071e3' },
 ]
@@ -55,7 +55,7 @@ function EventRow({ e }) {
         发现新推荐 · <b>{p.title || ''}</b>
       </>
     )
-    sub = p.watch ? `条件 ${p.watch}` : p.price ? yuan(p.price) : ''
+    sub = p.watch ? p.watch : p.price ? yuan(p.price) : ''
   } else if (e.type === 'sold') {
     warn = true
     icon = 'ti-circle-x'
@@ -72,7 +72,6 @@ function EventRow({ e }) {
         已收藏 · <b>{p.title || ''}</b>
       </>
     )
-    sub = '加入收藏监控'
   }
   const open = () => p.url && window.open(p.url, '_blank', 'noreferrer')
   return (
@@ -92,6 +91,7 @@ function EventRow({ e }) {
 }
 
 export default function App() {
+  const { pathname } = useLocation()
   const [skin, setSkin] = useState(() => localStorage.getItem('xy-skin') || 'linear')
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('xy-side') === '1')
   const [status, setStatus] = useState(null)
@@ -157,22 +157,23 @@ export default function App() {
 
   useEffect(() => {
     api.watches().then(setWatchList).catch(() => {})
-  }, [refreshKey])
+  }, [refreshKey, pathname])
 
   const run = async (watch) => {
     setRunMenu(false)
-    await api.run(watch)
-    showToast(watch ? `已触发「${watch}」抓取…` : '已触发全部抓取，约 30–60 秒，完成后自动刷新…')
-    poll()
+    try {
+      await api.run(watch)
+      showToast(watch ? `已触发「${watch}」抓取…` : '已触发全部抓取，完成后自动刷新')
+      poll()
+    } catch (error) {
+      showToast(error.message)
+    }
   }
 
   const running = status?.running
   const metrics = [
-    { k: '待审推荐', i: 'ti-inbox', v: stats.pending, small: stats.passed ? `通过 ${stats.passed}` : null },
-    { k: '监控条件', i: 'ti-target', v: stats.watches },
-    { k: '收藏监控', i: 'ti-bookmark', v: stats.favorites },
     { k: '今日降价', i: 'ti-trending-down', v: stats.drops_today },
-    { k: '死链', i: 'ti-circle-x', v: stats.dead },
+    { k: '已失效', i: 'ti-circle-x', v: stats.dead },
   ]
 
   const activeTab = EVENT_TABS.find((t) => t.key === eventTab) || EVENT_TABS[0]
@@ -190,17 +191,17 @@ export default function App() {
           闲鱼控制台
         </div>
         <div className="grow" />
-        <div className="live">
-          <span className={'pulse' + (running ? ' on' : '')} />
-          {running ? '抓取中…' : login.has_state ? '空闲 · 登录态正常' : '空闲 · 未登录'}
+        <div className="live" role="status">
+          {running ? '抓取中…' : login.has_state ? '' : '未登录'}
         </div>
         <div className="skins">
-          <span className="lab">外观</span>
           {SKINS.map((s) => (
             <button
               key={s.k}
               className={'swatch' + (skin === s.k ? ' on' : '')}
               title={s.name}
+              aria-label={`外观：${s.name}`}
+              aria-pressed={skin === s.k}
               style={{ background: `linear-gradient(135deg, ${s.bg} 0 50%, ${s.acc} 50% 100%)` }}
               onClick={() => changeSkin(s.k)}
             />
@@ -244,7 +245,7 @@ export default function App() {
       {/* 侧栏 */}
       <div className="side">
         {NAV.map(([path, label, icon, key]) => (
-          <NavLink key={path} to={path} className={({ isActive }) => 'nav' + (isActive ? ' active' : '')}>
+          <NavLink key={path} to={path} aria-label={label} className={({ isActive }) => 'nav' + (isActive ? ' active' : '')}>
             <i className={'ti ' + icon} />
             <span className="label">{label}</span>
             {key && <span className="cnt">{stats[key]}</span>}
@@ -278,10 +279,7 @@ export default function App() {
                 <i className={'ti ' + m.i} />
                 {m.k}
               </div>
-              <div className="v">
-                {m.v}
-                {m.small && <small>{m.small}</small>}
-              </div>
+              <div className="v">{m.v}</div>
             </div>
           ))}
         </div>
@@ -326,7 +324,7 @@ export default function App() {
         <div className="rail-list">
           {shownEvents === null ? null : shownEvents.length === 0 ? (
             <div className="rail-empty">
-              {(events?.length ?? 0) === 0 ? '暂无事件，运行一轮后这里会有动态' : '该类暂无事件'}
+              暂无事件
             </div>
           ) : (
             shownEvents.map((e, idx) => <EventRow key={`${e.item_id}-${e.created_at}-${idx}`} e={e} />)

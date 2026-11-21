@@ -1,4 +1,10 @@
-const J = (r) => r.json()
+const J = async (response) => {
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(typeof data.detail === 'string' ? data.detail : '操作失败')
+  }
+  return data
+}
 const post = (url, body) =>
   fetch(url, {
     method: 'POST',
@@ -7,6 +13,14 @@ const post = (url, body) =>
   }).then(J)
 
 export const api = {
+  access: () => fetch('/api/access').then(J),
+  folders: () => fetch('/api/watch-folders').then(J),
+  createFolder: (name) => post('/api/watch-folders', { name }),
+  shared: () => fetch('/api/shared').then(J),
+  prices: (item, folder) => fetch(folder
+    ? `/api/shared/${encodeURIComponent(folder)}/${encodeURIComponent(item)}/prices`
+    : `/api/items/${encodeURIComponent(item)}/prices`).then(J),
+  favoriteShared: (folder, item) => post(`/api/shared/${encodeURIComponent(folder)}/${encodeURIComponent(item)}/favorite`),
   watches: () => fetch('/api/watches').then(J),
   createWatch: (b) => post('/api/watches', b),
   updateWatch: (id, b) =>
