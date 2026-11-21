@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -99,10 +100,21 @@ def effective_settings(cfg: AppConfig) -> Settings:
 
 
 # --- 用例 ---
+@dataclass
+class ScanResult:
+    """一轮扫描的两个数字: 命中规则的条数, 以及真正新入队的推荐数。"""
+    created: int = 0
+    scanned: int = 0
+
+
 def scan_recommendations(ctx, session: Session, settings: Settings,
-                         watches: list[Watch]) -> int:
-    """搜索 → 规则过滤 → 去重 → LLM 二次审核 → 写"我没见过的"推荐。返回新增数。"""
-    created = 0
+                         watches: list[Watch]) -> ScanResult:
+    """搜索 → 规则过滤 → 去重 → LLM 二次审核 → 写"我没见过的"推荐。
+
+    `created` 只数真正新入队的候选；`scanned` 是本轮搜索命中规则的条数——
+    有了它才能区分「一条都没搜到」和「都搜到了但都不是新的」。
+    """
+    result = ScanResult()
     for w in watches:
         if not w.enabled:
             continue
@@ -114,6 +126,7 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
             if item.item_id in seen or not matches(item, w):
                 continue
             seen.add(item.item_id)
+            result.scanned += 1
             previous = known.get(item.item_id)
             if previous is not None:
                 repo.upsert_item_with_price(session, item, source="search")
@@ -128,7 +141,7 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
                 continue
             fresh.append(item)
         # LLM 二次审核(有 requirement 才审; 无要求/失败放行)。
-        # 未通过的也入库(带 rec_ok=False + 理由), 由前端筛选展示; 返回值只数"通过"的(头条数字)。
+        # 未通过的也入库(带 rec_ok=False + 理由), 由前端筛选展示。
         verdicts = review.review_items(fresh, w.requirement, settings)
         for item, verdict in zip(fresh, verdicts):
             ok = None if verdict.skipped else verdict.ok
@@ -143,14 +156,14 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
                 repo.save_watch_match(session, w.id, item, ok, reason)
             if not new:
                 continue
-            if ok:
-                created += 1
-            # 进事件流: AI 通过, 或人工审核模式下等人处理
-            if ok is True or (ok is None and not settings.review_enabled):
+            # AI 通过, 或人工审核模式下进队列 → 都算"本轮新推荐"
+            queued = ok is True or (ok is None and not settings.review_enabled)
+            if queued:
+                result.created += 1
                 repo.add_event(session, item.item_id, "new_recommendation",
                                {"title": item.title, "url": item.url, "price": item.price,
                                 "pic": item.pic_url, "watch": w.name})
-    return created
+    return result
 
 
 def rereview_pending(session: Session, settings: Settings) -> dict:

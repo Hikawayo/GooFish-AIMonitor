@@ -144,7 +144,9 @@ export default function App() {
         setRefreshKey((k) => k + 1)
         if (st.last?.error) showToast(`抓取出错：${st.last.error}`)
         else if (st.last)
-          showToast(`本轮完成：新推荐 ${st.last.recommendations ?? 0} · 降价 ${st.last.drops ?? 0}`)
+          showToast(
+            `本轮完成：命中 ${st.last.scanned ?? 0} 条 · 新推荐 ${st.last.recommendations ?? 0} · 降价 ${st.last.drops ?? 0}`,
+          )
       }
       wasRunning.current = st.running
     } catch {
@@ -164,6 +166,10 @@ export default function App() {
 
   const run = async (watch) => {
     setRunMenu(false)
+    if (running) {
+      showToast('正在抓取中，请稍后再试')
+      return
+    }
     try {
       await api.run(watch)
       showToast(watch ? `已触发「${watch}」抓取…` : '已触发全部抓取，完成后自动刷新')
@@ -227,7 +233,17 @@ export default function App() {
           <i className="ti ti-bell" />
         </button>
         <div className="run-wrap">
-          <button className="run" disabled={running} onClick={() => setRunMenu((o) => !o)}>
+          <button
+            className={'run' + (running ? ' busy' : '')}
+            aria-busy={running}
+            onClick={() => {
+              if (running) {
+                showToast('正在抓取中，请稍后再试')
+                return
+              }
+              setRunMenu((o) => !o)
+            }}
+          >
             <i className="ti ti-player-play" />
             立即运行
             <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />

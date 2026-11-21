@@ -79,6 +79,9 @@ button { font-family: inherit; }
   border: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
 }
 .run:hover { opacity: .9; }
+/* 抓取中: 按钮变淡但仍可点(点它是为了得到「正在搜索中」的反馈) */
+.run.busy { opacity: .55; }
+.run.busy:hover { opacity: .55; }
 .icon-btn { background: none; border: 1px solid var(--line); color: var(--dim); width: 34px; height: 34px; border-radius: var(--rad); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 17px; flex: none; }
 .icon-btn:hover { color: var(--fg); border-color: var(--line2); }
 .icon-btn.on { color: var(--acc); border-color: transparent; background: var(--soft); }

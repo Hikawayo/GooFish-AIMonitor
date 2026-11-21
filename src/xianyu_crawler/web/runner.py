@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 from datetime import datetime, timezone
@@ -14,7 +15,13 @@ from ..session import browser_session, is_logged_in
 from ..storage import repo
 from . import runtime, account
 
+logger = logging.getLogger(__name__)
 _LOCK = threading.Lock()
+
+
+def busy() -> bool:
+    """是否有浏览器作业在跑(全局串行锁)。前端按钮据此给「正在搜索中」的提示。"""
+    return _LOCK.locked()
 
 
 def _now_iso() -> str:
@@ -56,6 +63,7 @@ def crawl(watch_name: str | None = None) -> dict:
         settings = runtime.effective_settings(cfg)
         blocked = runtime.search_block_reason(settings)
         if blocked:
+            logger.warning("无法开始抓取(scope=%s): %s", runtime.scope()[:8], blocked)
             result = {"error": blocked, "at": _now_iso()}
             runtime.job_state()["last"] = result
             return result
@@ -83,6 +91,7 @@ def crawl(watch_name: str | None = None) -> dict:
                     pass
             check.close()
             if not logged_in:
+                logger.warning("闲鱼登录失效(scope=%s)", runtime.scope()[:8])
                 if settings.notify_on_login:
                     notifier.send_email(
                         settings, "闲鱼登录已失效",
@@ -90,20 +99,21 @@ def crawl(watch_name: str | None = None) -> dict:
                 result = {"error": "login_expired", "at": _now_iso()}
             elif watch_name:
                 # 只跑单个条件: 仅搜索该条件 + 通知(不刷收藏、不核活, 快)
-                recs = service.scan_recommendations(ctx, s, settings, watches)
+                scan = service.scan_recommendations(ctx, s, settings, watches)
                 notified = _notify(s, settings)
-                result = {"recommendations": recs, "scope": watch_name,
-                          "notified": notified, "at": _now_iso()}
+                result = {"recommendations": scan.created, "scanned": scan.scanned,
+                          "scope": watch_name, "notified": notified, "at": _now_iso()}
             else:
                 # 先跑监控(刷新收藏列表入库, 含收藏夹死链), scan 才能据此过滤
                 drops = service.run_price_monitor(ctx, s, settings)
-                recs = service.scan_recommendations(ctx, s, settings, watches)
+                scan = service.scan_recommendations(ctx, s, settings, watches)
                 # 给待审推荐核活, 标记卖出/删除的死链(避免重复打开)
                 dead = service.sweep_liveness(ctx, s, settings)
                 notified = _notify(s, settings)
-                result = {"recommendations": recs, "drops": drops, "dead": dead,
-                          "notified": notified, "at": _now_iso()}
+                result = {"recommendations": scan.created, "scanned": scan.scanned,
+                          "drops": drops, "dead": dead, "notified": notified, "at": _now_iso()}
     except Exception as e:  # noqa: BLE001 - 后台作业, 记录不抛
+        logger.exception("抓取失败(scope=%s)", runtime.scope()[:8])
         result = {"error": str(e), "at": _now_iso()}
     finally:
         if s is not None:

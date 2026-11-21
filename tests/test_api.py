@@ -45,6 +45,16 @@ def test_recommendations_api(client):
     assert client.get("/api/recommendations").json() == []
 
 
+def test_run_rejected_while_busy(client, monkeypatch):
+    """浏览器作业串行: 正在抓取时再点运行要明确回 409, 而不是静默跳过。"""
+    from xianyu_crawler.web import runner
+
+    monkeypatch.setattr(runner, "busy", lambda: True)
+    response = client.post("/api/run")
+    assert response.status_code == 409
+    assert "抓取中" in response.json()["detail"]
+
+
 def test_status_and_favorites_empty(client):
     assert client.get("/api/status").json()["running"] is False
     assert client.get("/api/favorites").json() == []

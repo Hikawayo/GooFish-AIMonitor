@@ -313,6 +313,8 @@ def api_run(watch: str | None = None, s: Session = Depends(get_db)):
     reason = runtime.search_block_reason(runtime.effective_settings(repo.get_config(s)))
     if reason:
         raise HTTPException(409, reason)
+    if runner.busy():          # 浏览器作业全局串行, 忙的时候明确拒绝而不是静默跳过
+        raise HTTPException(409, "正在抓取中，请稍后")
     runtime.start_thread(runner.crawl, watch)
     return {"status": "queued", "scope": watch or "all"}
 

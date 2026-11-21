@@ -15,9 +15,9 @@ def test_scan_recommendations_filters_and_dedups(monkeypatch):
     monkeypatch.setattr(service, "_search", lambda ctx, w, st: items)
     w = Watch(name="w", keywords=["x"], price_max=2000)
     n = service.scan_recommendations(None, s, Settings(), [w])
-    assert n == 1 and repo.list_recommendations(s)[0].item_id == "a"
+    assert n.created == 1 and n.scanned == 1 and repo.list_recommendations(s)[0].item_id == "a"
     # 再扫不重复
-    assert service.scan_recommendations(None, s, Settings(), [w]) == 0
+    assert service.scan_recommendations(None, s, Settings(), [w]).created == 0
 
 
 def test_scan_recommendations_llm_review(monkeypatch):
@@ -31,7 +31,7 @@ def test_scan_recommendations_llm_review(monkeypatch):
         lambda its, req, st: [review.ReviewVerdict(ok=(it.item_id == "a"), reason="r") for it in its])
     w = Watch(name="w", keywords=["x"], requirement="必须 M5")
     n = service.scan_recommendations(None, s, Settings(), [w])
-    assert n == 1                                   # 头条数字只数"通过"的
+    assert n.created == 1                           # 头条数字只数"通过"的
     recs = {r.item_id: r for r in repo.list_recommendations(s)}
     assert set(recs) == {"a", "b"}                  # 通过+未通过 都入库, 由前端筛选
     assert recs["a"].rec_ok is True and recs["b"].rec_ok is False
@@ -50,7 +50,7 @@ def test_scan_skips_dead_items(monkeypatch):
     w = Watch(name="w", keywords=["x"])
     n = service.scan_recommendations(None, s, Settings(), [w])
     ids = [r.item_id for r in repo.list_recommendations(s)]
-    assert n == 1 and ids == ["a"]      # 死链 b 被跳过
+    assert n.created == 1 and ids == ["a"]     # 死链 b 被跳过
 
 
 def test_sweep_liveness_marks_dead(monkeypatch):
@@ -107,7 +107,8 @@ def test_scan_without_ai_keeps_candidates_for_manual_review(monkeypatch):
     monkeypatch.setattr(service, "_search",
                         lambda ctx, w, st: [Item(item_id="m", title="t", url="u", price=100)])
     w = Watch(name="w", keywords=["x"], requirement="只要正品")
-    assert service.scan_recommendations(None, s, Settings(review_enabled=False), [w]) == 0
+    scan = service.scan_recommendations(None, s, Settings(review_enabled=False), [w])
+    assert scan.created == 1 and scan.scanned == 1   # 人工模式: 进队列也算新推荐
     [rec] = repo.list_recommendations(s)          # 仍进待审队列, 但没有 AI 裁决
     assert rec.rec_ok is None and rec.rec_reason is None
     assert [e.type for e in repo.recent_events(s)] == ["new_recommendation"]
@@ -154,7 +155,7 @@ def test_mute_recommendation_hides_and_blocks_rescan(monkeypatch):
     monkeypatch.setattr(service, "_search",
                         lambda ctx, w, st: [Item(item_id="z", title="t", url="u", price=500)])
     w = Watch(name="w", keywords=["x"])
-    assert service.scan_recommendations(None, s, Settings(), [w]) == 0
+    assert service.scan_recommendations(None, s, Settings(), [w]).created == 0
 
 
 def test_mute_forever():
