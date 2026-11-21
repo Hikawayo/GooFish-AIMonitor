@@ -2,6 +2,14 @@
 
 闲鱼控制台：本地运行的闲鱼选品(R1) + 降价监控(R2) Web 控制台。Python 3.12+ / Playwright(sync) / SQLAlchemy 2 / FastAPI + APScheduler / React + Vite。面向人类的说明见 [`README.md`](README.md)。
 
+## 本 Fork 的开发原则
+
+1. **Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.** 界面优先通过布局和信息层级自解释，避免多余二级标签、状态徽章和说明文字。
+2. **不写只是为了防止被质疑的代码。** 不做假设性过度设计、冗余兜底或无真实需求的复杂抽象。
+3. **不做只是为了防止被质疑的测试。** 测试真实关键行为和已发生的缺陷，不为覆盖率或形式上的完整性增加测试；数据正确性、访问控制等必要验证仍要做。
+4. **先可用，再改进。** 保留现有搜索、DeepSeek兼容审核、SQLite、Web 功能，以 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) 的三阶段计划实施；Live 只是首个监控场景，架构应复用于普通商品。
+5. **可共享，管理隔离。** 网页行情可供少量可信同事只读查看，后台登录态、密钥、修改操作必须限制在管理员端；优先简单可靠的访问控制，不预造复杂账号体系。
+
 ## 黄金规则(先读这条)
 
 1. **内置(inline)Pyright 在本仓库是坏的**，会报不可能的错(`import time` 无法解析、`X | None` 操作符不支持、`Mapped[...]` 参数错误等)。**不要信任内置诊断**。权威检查只用：
