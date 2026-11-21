@@ -2,6 +2,8 @@
 
 > 基于 [tristanwqy/GooFish-AIMonitor](https://github.com/tristanwqy/GooFish-AIMonitor) Fork。目标是复用现成闲鱼采集能力，先完成 Live 票务价格监控，再扩展到其他商品。这里是**计划**，不是已实现功能。
 
+**实时开发状态与 AI 接力入口**：[PROGRESS.md](PROGRESS.md)。本文件仅存需求与阶段验收；开发时持续更新进度快照，避免下一位 AI 重扫项目。
+
 ## 开发原则
 
 - **Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.** 页面靠布局、信息层级和操作位置表达含义，不堆叠解释文字、重复标签和状态徽章。
