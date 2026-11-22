@@ -55,6 +55,39 @@ def test_run_rejected_while_busy(client, monkeypatch):
     assert "抓取中" in response.json()["detail"]
 
 
+def test_price_trend_api(client):
+    """条件内价格总览: 分桶、最低价、空条件、非法粒度。"""
+    from datetime import datetime
+
+    from sqlalchemy import delete
+
+    from xianyu_crawler.models import Item
+    from xianyu_crawler.storage import repo
+    from xianyu_crawler.storage.orm import PriceHistory
+    from xianyu_crawler.web import runtime
+
+    s = runtime.session()
+    watch = repo.add_watch(s, name="w", keywords='["x"]')
+    item = Item(item_id="i1", title="t", url="u", price=100)
+    repo.create_recommendation(s, item, "w")
+    repo.save_watch_match(s, watch.id, item, None, None)
+    s.add_all([PriceHistory(item_id="i1", price=price, observed_at=datetime(2026, 11, 20, hour))
+               for hour, price in ((1, 100), (5, 90))])
+    # 建推荐时补的「现在」这一条会多出一个桶, 删掉只留上面两条
+    s.execute(delete(PriceHistory).where(PriceHistory.observed_at > datetime(2026, 11, 21)))
+    s.commit()
+
+    body = client.get(f"/api/price-trend?watch_ids={watch.id}&mode=day&tz=480").json()
+    assert body["mode"] == "day" and len(body["series"]) == 1
+    assert body["series"][0]["min"] == 90 and body["series"][0]["count"] == 1
+    assert body["items"][0]["item_id"] == "i1" and len(body["items"][0]["points"]) == 1
+    assert body["from"] and body["from"].endswith("+00:00")
+
+    assert client.get("/api/price-trend?watch_ids=999").json()["series"] == []
+    assert client.get(f"/api/price-trend?watch_ids={watch.id}&mode=year").status_code == 422
+    assert client.get("/api/price-trend").status_code == 422
+
+
 def test_status_and_favorites_empty(client):
     assert client.get("/api/status").json()["running"] is False
     assert client.get("/api/favorites").json() == []

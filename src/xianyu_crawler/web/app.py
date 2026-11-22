@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from . import runtime, runner, dto, login_runner, sharing
-from .. import service, notifier, review
+from .. import service, notifier, review, trend
 from ..models import Item
 from ..storage import repo
 from ..storage.orm import ItemRow, WatchFolder, WatchMatch
@@ -139,6 +139,36 @@ def api_item_prices(item_id: str, s: Session = Depends(get_db)):
         raise HTTPException(404, "商品不存在")
     return [{"price": point.price, "observed_at": dto._iso(point.observed_at)}
             for point in repo.price_history(s, item_id)]
+
+
+@app.get("/api/price-trend")
+def api_price_trend(watch_ids: str = "", mode: str = "all", tz: int = 480,
+                    s: Session = Depends(get_db)):
+    """一个或多个条件内的价格总览: 分桶后的最低/中位序列 + 每件商品自己的点。"""
+    ids = sorted({int(part) for part in watch_ids.split(",") if part.strip().isdigit()})
+    if not ids:
+        raise HTTPException(422, "请先选择一个条件")
+    if len(ids) > 50:
+        raise HTTPException(422, "一次最多汇总 50 个条件")
+    if mode not in trend.MODES:
+        raise HTTPException(422, "mode 只能是 all / day / week / month")
+    if not -720 <= tz <= 840:
+        raise HTTPException(422, "时区偏移超出范围")
+
+    data = trend.build(repo.trend_rows(s, ids), mode=mode, tz_minutes=tz)
+    return {
+        "mode": data["mode"],
+        "from": dto._iso(data["from"]),
+        "to": dto._iso(data["to"]),
+        "observations": data["observations"],
+        "series": [{"t": dto._iso(point["t"]), "min": point["min"],
+                    "median": point["median"], "count": point["count"]}
+                   for point in data["series"]],
+        "items": [{"item_id": item["item_id"], "title": item["title"],
+                   "points": [{"t": dto._iso(point["t"]), "price": point["price"]}
+                              for point in item["points"]]}
+                  for item in data["items"]],
+    }
 
 
 # ---------- config ----------

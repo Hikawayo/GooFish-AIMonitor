@@ -138,6 +138,20 @@ def price_history(s: Session, item_id: str):
                                         .limit(500)))))
 
 
+def trend_rows(s: Session, watch_ids: list[int]):
+    """这些条件下全部商品的价格观测(升序), 供 trend.build 聚合。"""
+    item_ids = {match.item_id for match in
+                s.scalars(select(WatchMatch).where(WatchMatch.watch_id.in_(watch_ids)))}
+    if not item_ids:
+        return []
+    return s.execute(
+        select(PriceHistory.item_id, ItemRow.title, PriceHistory.observed_at, PriceHistory.price)
+        .join(ItemRow, ItemRow.item_id == PriceHistory.item_id)
+        .where(PriceHistory.item_id.in_(item_ids))
+        .order_by(PriceHistory.observed_at.asc(), PriceHistory.id.asc())
+    ).all()
+
+
 def record_published_price(s: Session, match: WatchMatch) -> None:
     watch = s.get(WatchRow, match.watch_id)
     if not watch or not watch.public or match.ok is not True or match.reason == REVIEW_NOT_RUN:

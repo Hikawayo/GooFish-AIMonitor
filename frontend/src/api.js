@@ -20,6 +20,8 @@ export const api = {
   prices: (item, folder) => fetch(folder
     ? `/api/shared/${encodeURIComponent(folder)}/${encodeURIComponent(item)}/prices`
     : `/api/items/${encodeURIComponent(item)}/prices`).then(J),
+  priceTrend: (watchIds, mode, tz) =>
+    fetch(`/api/price-trend?watch_ids=${encodeURIComponent(watchIds)}&mode=${mode}&tz=${tz}`).then(J),
   favoriteShared: (folder, item) => post(`/api/shared/${encodeURIComponent(folder)}/${encodeURIComponent(item)}/favorite`),
   watches: () => fetch('/api/watches').then(J),
   createWatch: (b) => post('/api/watches', b),

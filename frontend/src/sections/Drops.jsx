@@ -5,6 +5,7 @@ import { yuan, fmtDate, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
 import ItemSort, { sortItems } from '../components/ItemSort'
 import PriceHistory from '../components/PriceHistory'
+import PriceTrend from '../components/PriceTrend'
 
 export default function Drops({ refreshKey }) {
   const [items, setItems] = useState(null)
@@ -54,6 +55,9 @@ export default function Drops({ refreshKey }) {
         <h2>{selected.name}</h2>
         <ItemSort value={sortOrder} onChange={setSortOrder} />
       </div>}
+      {selected?.watches?.length > 0 && (
+        <PriceTrend watches={selected.watches} refreshKey={refreshKey} />
+      )}
       {shown.length === 0 ? (
         <EmptyState title="还没有收藏" />
       ) : (

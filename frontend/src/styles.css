@@ -282,6 +282,32 @@ button { font-family: inherit; }
 .history-rows :is(th, td):last-child { text-align: right; }
 .history-actions { justify-content: flex-end; margin-top: 14px; }
 
+/* ---------- 价格总览(单个条件) ---------- */
+.trend { background: var(--s1); border: 1px solid var(--line); border-radius: var(--rad); padding: 12px 14px; margin-bottom: 14px; }
+.trend-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.trend-head h2 { font-size: 13px; font-weight: 600; margin-right: auto; white-space: nowrap; }
+.trend-modes { display: inline-flex; background: var(--s2); border-radius: var(--rad); padding: 2px; }
+.trend-modes button { border: none; background: none; color: var(--dim); font-size: 12px; padding: 4px 9px; border-radius: calc(var(--rad) - 2px); cursor: pointer; white-space: nowrap; }
+.trend-modes button[aria-pressed='true'] { background: var(--soft); color: var(--acc); }
+.trend-toggle { border: none; background: none; color: var(--dim); cursor: pointer; padding: 3px 4px; border-radius: 5px; display: flex; }
+.trend-toggle:hover { color: var(--fg); background: var(--s2); }
+.trend-readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 11.5px; color: var(--dim); margin: 10px 0 6px; font-variant-numeric: tabular-nums; }
+.trend-sum { margin-left: auto; }
+.trend-svg { display: block; width: 100%; height: auto; }
+.trend-grid { stroke: var(--line); stroke-width: 1; }
+.trend-axis { fill: var(--dim); font-size: 10.5px; }
+.trend-item-line { stroke: color-mix(in srgb, var(--fg) 20%, transparent); stroke-width: 1; }
+.trend-median-line { stroke: color-mix(in srgb, var(--fg) 45%, transparent); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.trend-min-line { stroke: var(--acc); stroke-width: 2; }
+.trend-cursor { stroke: var(--line2); stroke-width: 1; }
+.trend-dot { fill: var(--acc); }
+.trend-legend { display: flex; gap: 14px; font-size: 11px; color: var(--dim); margin-top: 8px; }
+.trend-legend i { display: inline-block; width: 14px; height: 2px; margin-right: 5px; vertical-align: middle; }
+.trend-key-min { background: var(--acc); }
+.trend-key-median { background: color-mix(in srgb, var(--fg) 45%, transparent); }
+.trend-key-item { background: color-mix(in srgb, var(--fg) 20%, transparent); }
+.trend-empty { color: var(--dim); font-size: 12.5px; padding: 16px 2px 6px; }
+
 .rec-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 11.5px; color: var(--dim); margin-bottom: 10px; }
 /* 卖家是决策信息: 首字母圆点 + 正常文字色, 让它一眼能扫到; 地区/成色继续用弱色 */
 .seller { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; color: var(--fg); font-weight: 500; }
@@ -531,4 +557,8 @@ button { font-family: inherit; }
   .folder-nav, .folder-results { grid-area: auto; }
   .folder-list { flex-direction: row; overflow-x: auto; }
   .folder-list button { flex: none; max-width: 150px; }
+  /* 价格总览: 窄屏把粒度切换单独放一行, 标题和收起按钮留在第一行 */
+  .trend-toggle { order: 2; margin-left: auto; }
+  .trend-modes { order: 3; width: 100%; }
+  .trend-modes button { flex: 1; text-align: center; }
 }

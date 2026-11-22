@@ -5,6 +5,7 @@ import { yuan, fmtDate, fmtDateTime, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
 import ItemSort, { sortItems } from '../components/ItemSort'
 import PriceHistory from '../components/PriceHistory'
+import PriceTrend from '../components/PriceTrend'
 
 const REVIEW_NOT_RUN = "(审核未运行)"
 
@@ -204,6 +205,9 @@ export default function Recommendations({ refreshKey, onToast }) {
         <h2>{selected.name}</h2>
         <ItemSort value={sortOrder} onChange={setSortOrder} />
       </div>}
+      {!isPublic && selected?.watches?.length > 0 && (
+        <PriceTrend watches={selected.watches} refreshKey={refreshKey} />
+      )}
       {!isPublic && !manual && source.length > 0 && (
         <div className="rec-toolbar">
           <div className="rec-filter">
