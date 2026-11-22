@@ -64,6 +64,17 @@ def test_all_mode_thins_long_timeline_but_keeps_ends():
     assert data["series"][-1]["min"] == 1
 
 
+def test_min_price_keeps_junk_listings_out():
+    """条件里混着便宜兑换码时, 价格下限能把它们挡在统计之外。"""
+    rows = [
+        obs("code", datetime(2026, 11, 20, 1, 0), 3),
+        obs("ticket", datetime(2026, 11, 20, 1, 0), 1500),
+    ]
+    data = trend.build(rows, mode="day", tz_minutes=480, min_price=500)
+    assert data["items_total"] == 1 and data["items"][0]["item_id"] == "ticket"
+    assert data["series"][0]["min"] == 1500 and data["observations"] == 1
+
+
 def test_empty_input():
     data = trend.build([], mode="day")
     assert data["series"] == [] and data["items"] == [] and data["from"] is None

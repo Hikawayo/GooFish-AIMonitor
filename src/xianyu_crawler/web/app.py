@@ -143,7 +143,7 @@ def api_item_prices(item_id: str, s: Session = Depends(get_db)):
 
 @app.get("/api/price-trend")
 def api_price_trend(watch_ids: str = "", mode: str = "all", tz: int = 480,
-                    s: Session = Depends(get_db)):
+                    min_price: float | None = None, s: Session = Depends(get_db)):
     """一个或多个条件内的价格总览: 分桶后的最低/中位序列 + 每件商品自己的点。"""
     ids = sorted({int(part) for part in watch_ids.split(",") if part.strip().isdigit()})
     if not ids:
@@ -154,13 +154,16 @@ def api_price_trend(watch_ids: str = "", mode: str = "all", tz: int = 480,
         raise HTTPException(422, "mode 只能是 all / day / week / month")
     if not -720 <= tz <= 840:
         raise HTTPException(422, "时区偏移超出范围")
+    if min_price is not None and min_price < 0:
+        raise HTTPException(422, "价格下限不能是负数")
 
-    data = trend.build(repo.trend_rows(s, ids), mode=mode, tz_minutes=tz)
+    data = trend.build(repo.trend_rows(s, ids), mode=mode, tz_minutes=tz, min_price=min_price)
     return {
         "mode": data["mode"],
         "from": dto._iso(data["from"]),
         "to": dto._iso(data["to"]),
         "observations": data["observations"],
+        "items_total": data["items_total"],
         "series": [{"t": dto._iso(point["t"]), "min": point["min"],
                     "median": point["median"], "count": point["count"]}
                    for point in data["series"]],

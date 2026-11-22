@@ -286,6 +286,13 @@ button { font-family: inherit; }
 .trend { background: var(--s1); border: 1px solid var(--line); border-radius: var(--rad); padding: 12px 14px; margin-bottom: 14px; }
 .trend-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .trend-head h2 { font-size: 13px; font-weight: 600; margin-right: auto; white-space: nowrap; }
+/* 价格下限: 一个条件里常混着 ¥2 的兑换码和 ¥1500 的门票, 用它把杂项挡掉 */
+.trend-floor {
+  width: 86px; background: var(--s2); border: 1px solid var(--line); color: var(--fg);
+  border-radius: var(--rad); padding: 4px 8px; font-size: 12px; font-family: var(--font-ui);
+}
+.trend-floor:focus { outline: none; border-color: var(--acc); }
+.trend-floor::placeholder { color: var(--dim); }
 .trend-modes { display: inline-flex; background: var(--s2); border-radius: var(--rad); padding: 2px; }
 .trend-modes button { border: none; background: none; color: var(--dim); font-size: 12px; padding: 4px 9px; border-radius: calc(var(--rad) - 2px); cursor: pointer; white-space: nowrap; }
 .trend-modes button[aria-pressed='true'] { background: var(--soft); color: var(--acc); }

@@ -99,6 +99,8 @@ function Chart({ data, width, mode, onHover, hover }) {
 export default function PriceTrend({ watches, refreshKey }) {
   const [mode, setMode] = useState('all')
   const [open, setOpen] = useState(() => localStorage.getItem('xy-trend') !== '0')
+  const [floorText, setFloorText] = useState(() => localStorage.getItem('xy-trend-floor') || '')
+  const [floor, setFloor] = useState(() => localStorage.getItem('xy-trend-floor') || '')
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [hover, setHover] = useState(null)
@@ -106,13 +108,22 @@ export default function PriceTrend({ watches, refreshKey }) {
   const box = useRef(null)
   const key = (watches || []).join(',')
 
+  // 输入价格下限时等手停 400ms 再请求, 免得每敲一位打一次接口
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFloor(floorText)
+      localStorage.setItem('xy-trend-floor', floorText)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [floorText])
+
   useEffect(() => {
     if (!key) {
       setData(null)
       return
     }
     let active = true
-    api.priceTrend(key, mode, -new Date().getTimezoneOffset())
+    api.priceTrend(key, mode, -new Date().getTimezoneOffset(), floor)
       .then((result) => {
         if (!active) return
         setData(result)
@@ -120,7 +131,7 @@ export default function PriceTrend({ watches, refreshKey }) {
       })
       .catch((err) => { if (active) setError(err.message) })
     return () => { active = false }
-  }, [key, mode, refreshKey])
+  }, [key, mode, floor, refreshKey])
 
   useEffect(() => {
     if (!open || !box.current) return
@@ -149,6 +160,9 @@ export default function PriceTrend({ watches, refreshKey }) {
     <div className="trend">
       <div className="trend-head">
         <h2>价格总览</h2>
+        <input className="trend-floor" type="number" min="0" step="10" inputMode="numeric"
+          placeholder="¥ 以上" aria-label="只看这个价格以上的商品"
+          value={floorText} onChange={(event) => setFloorText(event.target.value)} />
         <div className="trend-modes" role="group" aria-label="时间粒度">
           {MODES.map(([value, label]) => (
             <button key={value} type="button" aria-pressed={mode === value}
@@ -179,7 +193,9 @@ export default function PriceTrend({ watches, refreshKey }) {
                   </>
                   : null}
                 <span className="trend-sum">
-                  区间最低 {yuan(lowest)} · 共 {data.items.length} 件 · {data.observations} 次观测
+                  区间最低 {yuan(lowest)} · 共 {data.items_total} 件
+                  {data.items.length < data.items_total ? `（画了 ${data.items.length} 条）` : ''}
+                  {' · '}{data.observations} 次观测
                 </span>
               </div>
               <div ref={box}>

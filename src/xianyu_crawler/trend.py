@@ -17,7 +17,7 @@ MODES = ("all", "day", "week", "month")
 # 「全部时间」下时间点太多时等距抽稀, 避免 SVG 里几千个点
 MAX_SERIES_POINTS = 240
 # 商品太多时只画观测最多的若干条, 否则线会糊成一团
-MAX_ITEMS = 30
+MAX_ITEMS = 60
 
 
 def _bucket_time(moment: datetime, mode: str, tz: timedelta) -> datetime:
@@ -35,19 +35,25 @@ def _bucket_time(moment: datetime, mode: str, tz: timedelta) -> datetime:
     return local - tz
 
 
-def build(rows, mode: str = "all", tz_minutes: int = 480) -> dict:
-    """rows: 可迭代的 (item_id, title, observed_at, price), 时间可以是乱序。"""
+def build(rows, mode: str = "all", tz_minutes: int = 480,
+          min_price: float | None = None) -> dict:
+    """rows: 可迭代的 (item_id, title, observed_at, price), 时间可以是乱序。
+
+    min_price 用来把兑换码/特典这类低价商品挡在外面: 一个条件里常常混着
+    ¥2 的贴纸和 ¥1500 的门票, 不过滤的话「最低价」永远贴着地。
+    """
     if mode not in MODES:
         raise ValueError(f"mode 只能是 {MODES}")
     tz = timedelta(minutes=tz_minutes)
 
     points = [(str(item_id), title or "", moment, float(price))
               for item_id, title, moment, price in rows
-              if item_id and moment is not None and price is not None]
+              if item_id and moment is not None and price is not None
+              and (min_price is None or float(price) >= min_price)]
     points.sort(key=lambda row: row[2])
     if not points:
         return {"mode": mode, "from": None, "to": None, "series": [], "items": [],
-                "observations": 0}
+                "observations": 0, "items_total": 0}
 
     buckets: dict[datetime, dict[str, float]] = {}
     titles: dict[str, str] = {}
@@ -82,4 +88,5 @@ def build(rows, mode: str = "all", tz_minutes: int = 480) -> dict:
     items = [{"item_id": item_id, "title": titles.get(item_id, ""),
               "points": per_item[item_id]} for item_id in order]
     return {"mode": mode, "from": timeline[0], "to": timeline[-1],
-            "series": series, "items": items, "observations": len(points)}
+            "series": series, "items": items, "observations": len(points),
+            "items_total": len(per_item)}
