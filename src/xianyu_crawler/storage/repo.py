@@ -34,7 +34,8 @@ def upsert_item_with_price(s: Session, item: Item, source: str,
     reduce = item.reduce_price or 0.0
     row = s.get(ItemRow, item.item_id)
     prev = row.latest_price if row else None
-    if row is None:
+    created = row is None
+    if created:
         row = ItemRow(item_id=item.item_id, title=item.title, url=item.url,
                       seller_id=item.seller_id, seller_nick=item.seller_nick,
                       location=item.location, condition=item.condition,
@@ -62,8 +63,14 @@ def upsert_item_with_price(s: Session, item: Item, source: str,
             row.dead = True
             row.dead_reason = item.dead_reason
             row.dead_at = _now()
+    if item.original_price and item.original_price > (row.original_price or 0) \
+            and item.original_price > item.price:
+        row.original_price = item.original_price      # 平台给的最初挂牌价(详情精确值优先)
+    # 首次入库时若知道「卖家最初挂牌价 + 发布时间」, 先补这个起点, 走势才不会从半路开始
     s.add(PriceHistory(item_id=item.item_id, price=item.price))
     s.commit()
+    if (item.original_price and item.publish_time and item.original_price > item.price):
+        seed_original_price(s, item.item_id, item.original_price, item.publish_time)
     return prev
 
 
@@ -156,6 +163,20 @@ def trend_rows(s: Session, watch_ids: list[int]):
                or_(ItemRow.rec_status.is_(None), ItemRow.rec_status != "rejected"))
         .order_by(PriceHistory.observed_at.asc(), PriceHistory.id.asc())
     ).all()
+
+
+def seed_original_price(s: Session, item_id: str, price: float, observed_at: datetime) -> bool:
+    """把卖家发布时的原价补成这条商品最早的一次观测。
+
+    只在还没有更早记录时插一次: 已有历史就不该拿平台给的原价覆盖或插队。
+    """
+    earliest = s.scalar(select(func.min(PriceHistory.observed_at))
+                        .where(PriceHistory.item_id == item_id))
+    if earliest is not None and earliest <= observed_at:
+        return False
+    s.add(PriceHistory(item_id=item_id, price=price, observed_at=observed_at))
+    s.commit()
+    return True
 
 
 def record_published_price(s: Session, match: WatchMatch) -> None:

@@ -7,6 +7,7 @@ watch.keywords 是**一个**搜索词的若干词块, 用空格拼成一条 quer
 """
 from __future__ import annotations
 
+import re
 from urllib.parse import quote
 
 from .config import Watch
@@ -17,10 +18,29 @@ from .anti_detect import human_scroll
 SEARCH_URL = "https://www.goofish.com/search"
 SEARCH_API = "mtop.taobao.idlemtopsearch.pc.search"
 
+# 列表标签里的「累计降价 50%」: 用它和现价反推卖家最初挂的价格
+_DROP_TAG = re.compile(r"累计降价\s*(\d+)\s*%")
+
 
 def _has_next_page(raw: dict) -> bool:
     info = (((raw or {}).get("data") or {}).get("resultInfo")) or {}
     return bool(info.get("hasNextPage"))
+
+
+def _cumulative_original(ex: dict, price: float | None) -> float | None:
+    """从列表标签的「累计降价X%」反推卖家最初挂的价格; 没有这个标签返回 None。"""
+    if not price:
+        return None
+    for group in (ex.get("fishTags") or {}).values():
+        for tag in ((group or {}).get("tagList") or []):
+            text = str((tag.get("data") or {}).get("content") or "")
+            match = _DROP_TAG.search(text)
+            if not match:
+                continue
+            pct = int(match.group(1))
+            if 1 <= pct <= 99:
+                return round(price / (1 - pct / 100), 2)
+    return None
 
 
 def parse_search_json(raw: dict) -> list[Item]:
@@ -57,6 +77,7 @@ def parse_search_json(raw: dict) -> list[Item]:
             condition=guess_condition(str(title)),
             pic_url=str(pic) if isinstance(pic, str) else None,
             publish_time=to_dt_ms(args.get("publishTime")),
+            original_price=_cumulative_original(ex, price),
             raw=main if isinstance(main, dict) else None,
         ))
     return out

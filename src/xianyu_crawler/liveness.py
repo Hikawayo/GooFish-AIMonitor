@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from math import isfinite
 
 from .parsing import to_price
@@ -95,3 +97,34 @@ def parse_detail_price(detail: dict | None, item_id: str) -> tuple[float | None,
 
 def check_detail_price(ctx, item_id: str) -> tuple[float | None, bool]:
     return parse_detail_price(_read_detail(ctx, item_id, 2500), item_id)
+
+
+@dataclass
+class DetailReading:
+    """一次详情读取的结果: 现价、是否失效, 以及卖家最初挂的价格。"""
+    price: float | None = None
+    dead: bool = False
+    original_price: float | None = None     # itemDO.originalPrice, 卖家降价前的挂牌价
+    published_at: datetime | None = None    # itemDO.gmtCreate, naive UTC
+
+
+def parse_detail(detail: dict | None, item_id: str) -> DetailReading:
+    """在现价之外补上「发布价 + 发布时间」, 用来给走势补一个最早的点。"""
+    price, dead = parse_detail_price(detail, item_id)
+    reading = DetailReading(price=price, dead=dead)
+    if dead or not detail:
+        return reading
+    item = (detail.get("data") or {}).get("itemDO") or {}
+    if str(item.get("itemId")) != item_id:
+        return reading
+    original = to_price(item.get("originalPrice"))
+    if original is not None and isfinite(original) and original > 0:
+        reading.original_price = original
+    created = item.get("gmtCreate")
+    if isinstance(created, (int, float)) and created > 0:
+        reading.published_at = datetime.fromtimestamp(created / 1000, tz=timezone.utc).replace(tzinfo=None)
+    return reading
+
+
+def check_detail(ctx, item_id: str) -> DetailReading:
+    return parse_detail(_read_detail(ctx, item_id, 2500), item_id)

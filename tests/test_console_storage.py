@@ -2,11 +2,29 @@ import threading
 
 from xianyu_crawler.storage.db import make_session
 from xianyu_crawler.storage import repo
+from xianyu_crawler.storage.orm import ItemRow
 from xianyu_crawler.models import Item
 
 
 def session():
     return make_session("sqlite:///:memory:", create=True)
+
+
+def test_first_write_seeds_publish_price():
+    """首次入库知道原价与发布时间时, 先补这个起点, 走势不从半路开始。"""
+    from datetime import datetime
+
+    s = session()
+    item = Item(item_id="p1", title="t", url="u", price=1500,
+                publish_time=datetime(2026, 10, 10, 1, 0), original_price=3000)
+    repo.upsert_item_with_price(s, item, source="search")
+    assert [point.price for point in repo.price_history(s, "p1")] == [3000, 1500]
+    assert repo.get_latest_price(s, "p1") == 1500
+    row = s.get(ItemRow, "p1")
+    assert row is not None and row.original_price == 3000
+    # 已有的商品不会被重复补
+    repo.upsert_item_with_price(s, item.model_copy(update={"price": 1400}), source="search")
+    assert [point.price for point in repo.price_history(s, "p1")] == [3000, 1500, 1400]
 
 
 def test_concurrent_first_open_builds_database_once(tmp_path):

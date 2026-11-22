@@ -32,6 +32,7 @@ class ItemRow(Base):
     collect_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)   # 收藏次数(详情页)
     first_price: Mapped[float] = mapped_column(Float)
     latest_price: Mapped[float] = mapped_column(Float)
+    original_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 卖家最初挂牌价
     reduce_price: Mapped[float] = mapped_column(Float, default=0.0)  # 闲鱼"收藏后降价"金额
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=_now)   # 入库时间
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=_now)    # 最近抓取

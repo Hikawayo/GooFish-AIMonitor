@@ -69,7 +69,15 @@ export default function Drops({ refreshKey }) {
                 <a className="rec-title" href={it.url} target="_blank" rel="noreferrer">
                   {it.title}
                 </a>
-                <div className="rec-price-row"><div className="rec-price">{yuan(it.price)}</div><PriceHistory item={it} /></div>
+                <div className="rec-price-row">
+                  <div className="rec-price">
+                    {yuan(it.price)}
+                    {it.original_price > it.price && (
+                      <span className="rec-drop">已降 {yuan(it.original_price - it.price)}</span>
+                    )}
+                  </div>
+                  <PriceHistory item={it} />
+                </div>
                 {!it.dead && it.reduce_price > 0 && (
                   <Badge tone="drop">降 ¥{Math.round(it.reduce_price).toLocaleString('zh-CN')}</Badge>
                 )}

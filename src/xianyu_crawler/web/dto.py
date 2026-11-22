@@ -115,6 +115,7 @@ class RecommendationOut(BaseModel):
     title: str
     url: str
     price: float
+    original_price: float | None = None   # 卖家最初挂牌价(平台给), 比现价高才有意义
     location: str | None = None
     condition: str | None = None
     free_shipping: bool | None = None
@@ -140,6 +141,7 @@ class FavoriteOut(BaseModel):
     title: str
     url: str
     price: float
+    original_price: float | None = None
     reduce_price: float
     watch_ids: list[int] = []
     shared_folder_key: str | None = None
@@ -244,6 +246,7 @@ def config_to_out(c: AppConfig, *, member: bool = False) -> ConfigOut:
 def itemrow_to_rec(r: ItemRow) -> RecommendationOut:
     return RecommendationOut(
         item_id=r.item_id, title=r.title, url=r.url, price=r.latest_price,
+        original_price=r.original_price,
         location=r.location, condition=r.condition, free_shipping=r.free_shipping,
         seller_nick=r.seller_nick, watch_name=r.watch_name, pic_url=r.pic_url,
         want_count=r.want_count, browse_count=r.browse_count, collect_count=r.collect_count,
@@ -256,6 +259,7 @@ def itemrow_to_rec(r: ItemRow) -> RecommendationOut:
 def itemrow_to_fav(r: ItemRow) -> FavoriteOut:
     return FavoriteOut(
         item_id=r.item_id, title=r.title, url=r.url, price=r.latest_price,
+        original_price=r.original_price,
         reduce_price=r.reduce_price or 0.0, location=r.location, shared_folder_key=r.shared_folder_key,
         condition=r.condition, free_shipping=r.free_shipping, seller_nick=r.seller_nick,
         favorited_at=_iso(r.favorited_at),

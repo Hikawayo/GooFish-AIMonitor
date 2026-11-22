@@ -22,3 +22,19 @@ def test_parse_search_sample():
     assert it.free_shipping is True
     assert it.condition == "99新"
     assert it.url == "https://www.goofish.com/item?id=111"
+
+
+def test_original_price_from_cumulative_drop_tag():
+    """列表标签「累计降价50%」+ 现价 → 反推卖家最初挂牌价。"""
+    raw = {"data": {"resultList": [{"data": {"item": {"main": {
+        "exContent": {
+            "itemId": "999", "title": "对邦 门票", "area": "上海",
+            "detailParams": {"soldPrice": "1500"},
+            "fishTags": {"r3": {"tagList": [{"data": {"content": "累计降价50%"}}]}},
+        },
+        "clickParam": {"args": {"publishTime": 1791594988000}},
+    }}}}]}}
+    [item] = parse_search_json(raw)
+    assert item.price == 1500.0
+    assert item.original_price == 3000.0
+    assert item.publish_time is not None
