@@ -14,6 +14,7 @@ from .config import Watch
 from .models import Item
 from .parsing import to_price, guess_condition, to_dt_ms
 from .anti_detect import human_scroll
+from .session import open_page
 
 SEARCH_URL = "https://www.goofish.com/search"
 SEARCH_API = "mtop.taobao.idlemtopsearch.pc.search"
@@ -97,7 +98,8 @@ def search(ctx, watch: Watch, max_pages: int = 3, search_url: str = SEARCH_URL) 
     page.on("response", _on_response)
     try:
         query = " ".join(k.strip() for k in watch.keywords if k.strip())  # 多词块拼一条 query
-        page.goto(f"{search_url}?q={quote(query)}")
+        if not open_page(page, f"{search_url}?q={quote(query)}"):
+            raise RuntimeError("打开闲鱼搜索页超时（网络慢或触发风控）")
         page.wait_for_timeout(4000)
         n = len(captured)
         for _ in range(max(0, max_pages - 1)):

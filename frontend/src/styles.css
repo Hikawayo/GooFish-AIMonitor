@@ -183,6 +183,19 @@ button { font-family: inherit; }
    主区
    ============================================================ */
 .main { min-width: 0; overflow-y: auto; padding: 20px 24px 36px; }
+/* 上一轮抓取失败: 常驻提示, 不靠一闪而过的 toast */
+.run-alert {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 16px; padding: 10px 12px;
+  border: 1px solid var(--warn); border-radius: var(--rad);
+  background: var(--s1); color: var(--fg); font-size: 12.5px; line-height: 1.5;
+}
+.run-alert i.ti-alert-triangle { color: var(--warn); font-size: 15px; flex: none; }
+.run-alert span { flex: 1; min-width: 0; }
+.run-alert time { margin-left: 8px; color: var(--dim); font-size: 11px; }
+.run-alert .btn { flex: none; }
+.run-alert-x { flex: none; border: none; background: none; color: var(--dim); cursor: pointer; padding: 2px; display: flex; }
+.run-alert-x:hover { color: var(--fg); }
 
 /* 保留侧栏未展示的统计 */
 .strip { display: flex; gap: 8px 18px; flex-wrap: wrap; margin-bottom: 18px; }

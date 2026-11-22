@@ -102,6 +102,8 @@ export default function App() {
   const [events, setEvents] = useState(null)
   const [login, setLogin] = useState({ has_state: false })
   const [toast, setToast] = useState(null)
+  // 失败提示条: 关掉后只在下一轮新失败时再出现
+  const [dismissedError, setDismissedError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [railOpen, setRailOpen] = useState(() => localStorage.getItem('xy-rail') !== '0')
   const [eventTab, setEventTab] = useState('all')
@@ -159,7 +161,9 @@ export default function App() {
       setLogin(lg)
       if (wasRunning.current && !st.running) {
         setRefreshKey((k) => k + 1)
-        if (st.last?.error) showToast(`抓取出错：${st.last.error}`)
+        if (st.last?.skipped) {
+          showToast(st.last.skipped === 'paused' ? '已暂停，本轮没有抓取' : '上一轮还在跑，这次跳过了')
+        } else if (st.last?.error) showToast(`抓取出错：${st.last.error}`)
         else if (st.last) {
           const drops = st.last.drops ?? 0
           showToast(
@@ -333,6 +337,20 @@ export default function App() {
 
       {/* 主区 */}
       <div className="main">
+        {!running && status?.last?.error && dismissedError !== status.last.at && (
+          <div className="run-alert" role="alert">
+            <i className="ti ti-alert-triangle" />
+            <span>
+              上一轮抓取没有跑成：{status.last.error}
+              <time>{fmtDateTime(status.last.at)}</time>
+            </span>
+            <button className="btn btn-sm" onClick={() => run(null)}>重试</button>
+            <button className="run-alert-x" aria-label="关闭提示"
+              onClick={() => setDismissedError(status.last.at)}>
+              <i className="ti ti-x" />
+            </button>
+          </div>
+        )}
         <div className="strip">
           {metrics.map((m) => (
             <div className="metric" key={m.k}>

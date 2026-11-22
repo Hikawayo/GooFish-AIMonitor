@@ -24,6 +24,20 @@ def busy() -> bool:
     return _LOCK.locked()
 
 
+def _friendly_job_error(e: Exception) -> str:
+    """把底层异常翻成用户能看懂的一句话(原始信息留在容器日志里)。"""
+    text = str(e)
+    if "超时" in text:
+        return text
+    if "Timeout" in text or "timeout" in text:
+        return "打开闲鱼超时（网络慢或触发风控），稍后重试"
+    if "net::" in text or "Connection" in text:
+        return "连不上闲鱼（网络异常），稍后重试"
+    if "Executable doesn't exist" in text or "BrowserType.launch" in text:
+        return "浏览器启动失败，请检查服务端 Chromium 是否正常"
+    return text[:200] or "未知错误"
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -115,7 +129,7 @@ def crawl(watch_name: str | None = None) -> dict:
                           "at": _now_iso()}
     except Exception as e:  # noqa: BLE001 - 后台作业, 记录不抛
         logger.exception("抓取失败(scope=%s)", runtime.scope()[:8])
-        result = {"error": str(e), "at": _now_iso()}
+        result = {"error": _friendly_job_error(e), "at": _now_iso()}
     finally:
         if s is not None:
             s.close()

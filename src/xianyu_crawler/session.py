@@ -4,11 +4,29 @@ from __future__ import annotations
 from pathlib import Path
 from contextlib import contextmanager
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
 from .anti_detect import pick_profile
 
 HOME = "https://www.goofish.com/"
+# 打开页面最多等多久: 只等 DOM, 不等图片视频等全部资源(闲鱼首页 load 事件经常几十秒)
+NAV_TIMEOUT_MS = 20_000
+
+
+def open_page(page, url: str, timeout: int = NAV_TIMEOUT_MS) -> bool:
+    """打开页面并返回是否成功。
+
+    默认的 wait_until="load" 要等所有子资源, 闲鱼首页图片多, 一次慢资源就能把
+    整轮抓取拖死(表现为「跑完了但价格没变」)。这里只等 DOM, 超时再退一步用 commit。
+    """
+    for wait in ("domcontentloaded", "commit"):
+        try:
+            page.goto(url, wait_until=wait, timeout=timeout)
+            return True
+        except PlaywrightTimeout:
+            continue
+    return False
 
 
 @contextmanager
@@ -48,8 +66,10 @@ def browser_session(settings, state_path: str | None = None):
 
 def is_logged_in(page) -> bool:
     """登录校验(保守): 访问首页, 若被重定向到登录/passport 页则判未登录。
-    保守判定避免误报(宁可漏判也不频繁误发重登邮件)。"""
-    page.goto(HOME)
+    保守判定避免误报(宁可漏判也不频繁误发重登邮件)。
+    首页打不开时**不判未登录**——那是网络慢或风控, 让后续搜索自己报错。"""
+    if not open_page(page, HOME):
+        return True
     page.wait_for_timeout(2000)
     u = page.url.lower()
     return not any(k in u for k in ("login", "passport", "havana", "sign"))

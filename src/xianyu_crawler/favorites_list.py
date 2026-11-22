@@ -9,6 +9,7 @@ from __future__ import annotations
 from .models import Item
 from .parsing import to_price, guess_condition
 from .anti_detect import human_scroll
+from .session import open_page
 
 # 收藏列表页(用户确认); 可经 Settings.favorites_url / XIANYU_FAVORITES_URL 覆盖
 FAVORITES_URL = "https://www.goofish.com/collection"
@@ -80,7 +81,8 @@ def read_favorites(ctx, url: str = FAVORITES_URL, max_pages: int = 5) -> list[It
 
     page.on("response", _on_response)
     try:
-        page.goto(url)
+        if not open_page(page, url):
+            return []          # 收藏页打不开: 本轮跳过, 不清空已有收藏
         page.wait_for_timeout(4000)
         n = len(captured)
         for _ in range(max(0, max_pages - 1)):
