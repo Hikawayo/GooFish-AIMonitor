@@ -244,6 +244,7 @@ export default function Recommendations({ refreshKey, onToast }) {
                     <PriceHistory item={item} folder={selected.id} />
                   </div>
                   {item.seller_nick && <div className="rec-meta"><Seller nick={item.seller_nick} /></div>}
+                  <Attrs attrs={item.attrs} />
                   <TimeMeta items={[['上架', ago(item.publish_time)], ['观测', fmtDateTime(item.observed_at)]]} />
                   <Button
                     disabled={busy[`shared:${item.item_id}`] || savedShared[item.item_id]}
