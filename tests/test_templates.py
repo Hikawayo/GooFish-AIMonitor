@@ -34,7 +34,10 @@ def test_general_template_returns_no_attrs():
 def test_bundle_and_deposit_are_not_comparable():
     assert trend.is_comparable(None) is True
     assert trend.is_comparable({"seat": "内场", "qty": 1}) is True
+    # 两张一起出但标的是单张价 → 仍然可比; 说不清单价才剔除
+    assert trend.is_comparable({"qty": 2, "unit": "单张"}) is True
     assert trend.is_comparable({"qty": 2}) is False
+    assert trend.is_comparable({"qty": 2, "unit": "合计"}) is False
     assert trend.is_comparable({"bundle": True}) is False
     assert trend.is_comparable({"deposit": True}) is False
     assert trend.is_comparable({"unit": "合计"}) is False

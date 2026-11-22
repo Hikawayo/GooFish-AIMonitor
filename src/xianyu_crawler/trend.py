@@ -68,16 +68,16 @@ def _auto_floor(rows) -> tuple[float | None, int]:
 def is_comparable(attrs: dict | None) -> bool:
     """能不能进「最低价 / 中位数」的统计。
 
-    捆绑、只收定金尾款、多张一起卖(合计价或数量>1)的挂牌不是单票行情,
-    画线可以, 混进统计会把最低价拉歪。没有属性 = 按通用商品处理。
+    捆绑、只收定金尾款、标的是多张总价的挂牌不是单票行情, 画线可以, 混进统计
+    会把最低价拉歪。「两张一起出、标单张价」照常算可比, 只有说不清单价时剔除。
     """
     if not attrs:
         return True
     if attrs.get("bundle") or attrs.get("deposit"):
         return False
-    if int(attrs.get("qty") or 1) > 1:
-        return False
     if attrs.get("unit") == "合计":
+        return False
+    if int(attrs.get("qty") or 1) > 1 and attrs.get("unit") != "单张":
         return False
     return True
 
