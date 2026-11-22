@@ -11,6 +11,7 @@ import threading
 from datetime import datetime, timezone
 
 from .. import service, notifier
+from ..search import SessionExpired
 from ..session import browser_session, is_logged_in
 from ..storage import repo
 from . import runtime, account
@@ -69,6 +70,7 @@ def crawl(watch_name: str | None = None) -> dict:
         return {"skipped": "busy"}
     runtime.job_state()["running"] = True
     s = None
+    settings = None
     try:
         s = runtime.session()
         cfg = repo.get_config(s)
@@ -150,6 +152,14 @@ def crawl(watch_name: str | None = None) -> dict:
                           "at": _now_iso()}
                 if scan.warning:
                     result["warn"] = scan.warning
+    except SessionExpired as e:  # 登录过期: 搜索接口只回空壳, 必须当成"没登录"处理
+        logger.warning("闲鱼登录已过期(scope=%s): %s", runtime.scope()[:8], e)
+        if settings is not None and settings.notify_on_login:
+            notifier.send_email(
+                settings, "闲鱼登录已过期",
+                "控制台检测到登录态过期（搜索接口返回 SESSION_EXPIRED，列表为空），"
+                "请打开控制台 → 设置 → 闲鱼登录 → 扫码登录。")
+        result = {"error": "login_expired", "at": _now_iso()}
     except Exception as e:  # noqa: BLE001 - 后台作业, 记录不抛
         logger.exception("抓取失败(scope=%s)", runtime.scope()[:8])
         result = {"error": _friendly_job_error(e), "at": _now_iso()}

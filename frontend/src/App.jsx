@@ -362,12 +362,16 @@ export default function App() {
           <div className="run-alert" role="alert" data-kind={status.last.error ? 'error' : 'warn'}>
             <i className={'ti ' + (status.last.error ? 'ti-alert-triangle' : 'ti-alert-circle')} />
             <span>
-              {status.last.error
-                ? `上一轮抓取没有跑成：${status.last.error}`
-                : `上一轮跑完了，但结果可疑：${status.last.warn}`}
+              {status.last.error === 'login_expired'
+                ? '闲鱼登录已过期，所以搜索拿不到商品；重新扫码后即可恢复'
+                : status.last.error
+                  ? `上一轮抓取没有跑成：${status.last.error}`
+                  : `上一轮跑完了，但结果可疑：${status.last.warn}`}
               <time>{fmtDateTime(status.last.at)}</time>
             </span>
-            <button className="btn btn-sm" onClick={() => run(null)}>重试</button>
+            {status.last.error === 'login_expired'
+              ? <Link className="btn btn-sm" to="/settings">去登录</Link>
+              : <button className="btn btn-sm" onClick={() => run(null)}>重试</button>}
             <button className="run-alert-x" aria-label="关闭提示"
               onClick={() => setDismissedError(status.last.at)}>
               <i className="ti ti-x" />

@@ -38,3 +38,14 @@ def test_original_price_from_cumulative_drop_tag():
     assert item.price == 1500.0
     assert item.original_price == 3000.0
     assert item.publish_time is not None
+
+
+def test_session_expired_detected_even_when_ret_says_success():
+    """登录过期时接口仍回 SUCCESS 但列表为空, 不能当成"没人卖"。"""
+    from xianyu_crawler.search import _session_expired
+
+    assert _session_expired([{"ret": ["SUCCESS::调用成功"]},
+                             {"ret": ["FAIL_SYS_SESSION_EXPIRED::Session过期"]}]) is True
+    assert _session_expired([{"ret": ["FAIL_SYS_SESSION_EXPIRED::Session过期"]}]) is True
+    assert _session_expired([{"ret": ["SUCCESS::调用成功"]}]) is False
+    assert _session_expired([]) is False

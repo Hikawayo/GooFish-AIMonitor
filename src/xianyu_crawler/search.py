@@ -19,6 +19,10 @@ from .session import open_page
 SEARCH_URL = "https://www.goofish.com/search"
 SEARCH_API = "mtop.taobao.idlemtopsearch.pc.search"
 
+
+class SessionExpired(RuntimeError):
+    """闲鱼登录态过期: 接口返回 FAIL_SYS_SESSION_EXPIRED, 搜索永远 0 条。"""
+
 # 列表标签里的「累计降价 50%」: 用它和现价反推卖家最初挂的价格
 _DROP_TAG = re.compile(r"累计降价\s*(\d+)\s*%")
 
@@ -42,6 +46,22 @@ def _cumulative_original(ex: dict, price: float | None) -> float | None:
             if 1 <= pct <= 99:
                 return round(price / (1 - pct / 100), 2)
     return None
+
+
+def _session_expired(payloads: list) -> bool:
+    """接口 ret 里出现 SESSION_EXPIRED / 登录过期 → 登录态真的失效了。
+
+    这种情况下接口仍会回 SUCCESS 但 resultList 为空, 光看条数会误判成"没人卖"。
+    """
+    for payload in payloads:
+        ret = (payload or {}).get("ret") if isinstance(payload, dict) else None
+        text = " ".join(str(part) for part in ret) if isinstance(ret, list) else str(ret or "")
+        lowered = text.lower()
+        if "session_expired" in lowered or "session expired" in lowered:
+            return True
+        if "过期" in text and ("session" in lowered or "登录" in text):
+            return True
+    return False
 
 
 def _no_result_reason(page) -> str:
@@ -114,6 +134,8 @@ def search(ctx, watch: Watch, max_pages: int = 3, search_url: str = SEARCH_URL) 
         if not open_page(page, f"{search_url}?q={quote(query)}"):
             raise RuntimeError("打开闲鱼搜索页超时（网络慢或触发风控）")
         page.wait_for_timeout(4000)
+        if not captured:                 # 列表接口偶尔慢一拍, 再等一轮
+            page.wait_for_timeout(4000)
         n = len(captured)
         for _ in range(max(0, max_pages - 1)):
             if captured and not _has_next_page(captured[-1]):
@@ -124,6 +146,12 @@ def search(ctx, watch: Watch, max_pages: int = 3, search_url: str = SEARCH_URL) 
             if len(captured) == n:        # 滚动未触发新页 → 停
                 break
             n = len(captured)
+        # 登录过期时接口仍回 SUCCESS 但列表为空 —— 必须先识别, 否则会被当成"没人卖"
+        if _session_expired(captured):
+            raise SessionExpired("闲鱼登录已过期，请到「设置 → 闲鱼登录」重新扫码")
+        # 一条响应都没拿到 = 列表没出来(风控/改版), 同样不能当成"没有商品"
+        if not captured:
+            raise RuntimeError(_no_result_reason(page))
     finally:
         page.close()
 
