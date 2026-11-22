@@ -54,9 +54,17 @@
 
 ## 验证命令(完成前必跑)
 
+```powershell
+pwsh -File scripts/verify.ps1              # pytest + pyright, 只回一行
+pwsh -File scripts/verify.ps1 -Frontend    # 再加前端构建
+```
+
+三个固定入口(也是 skill: `verify` / `deploy` / `diagnose`)。它们的约定是**只输出一行**，详细过程写 `data/*.log`；回复里贴那一行就够，不要整段贴输出。
+
 ```bash
-/opt/miniconda3/bin/python -m pytest -q
-npx --yes pyright@latest --pythonpath /opt/miniconda3/bin/python src tests scripts
+# 等价的手工命令(Windows 上路径换成 .venv\Scripts\python.exe)
+.venv/Scripts/python.exe -m pytest -q
+npx --yes pyright@latest --pythonpath .venv/Scripts/python.exe src tests scripts
 cd frontend && npm run build          # 产物 → ../src/xianyu_crawler/web/static
 ```
 
@@ -119,6 +127,13 @@ SQLite 读回的 datetime 一律 **naive**。统一约定：库里存 **naive UT
 - 字体：全局 `Microsoft YaHei`（`--font-ui`，macOS/Linux 回退 PingFang SC / Noto Sans SC / system-ui），不再外链 Google Fonts；图标仍是 tabler 图标字体。
 
 ## 部署
+
+```powershell
+pwsh -File scripts/deploy.ps1            # 打包→scp→构建→重启→探活, 只回一行
+pwsh -File scripts/deploy.ps1 -NoBuild   # 只同步 git + 重启(纯文档改动)
+```
+
+服务器地址与密钥在 `data/deploy.env`（gitignore），不在仓库里。手工作业流程如下，脚本就是它的固化：
 
 ```bash
 docker build -t xianyu-console:latest \
