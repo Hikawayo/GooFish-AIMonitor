@@ -22,3 +22,5 @@ pwsh -File scripts/diagnose.ps1 -Minutes 720  # 更长窗口
 4. 错误行只取 4 行；要更深的原因再定向 `docker logs --since 30m | grep -i <关键词> | tail -10`。
 
 不要用「翻 200 行日志」来回答「为什么没更新」——先在事件表和 `price_history` 的时间里找矛盾点。
+
+统一纪律见 AGENTS.md 的「上下文纪律」：大输出落盘、grep 先于 read、大日志交给子代理、多步合成一次命令。

@@ -20,3 +20,5 @@ pwsh -File scripts/deploy.ps1 -NoBuild   # 只同步 git + 重启(文档、服�
 - 只改 `docs/`、`.agents/`、`README`、`AGENTS.md` 时用 `-NoBuild`：镜像里不包含这些文件，构建纯属浪费。
 - 同一会话里的多个小改**攒成一次发布**：一次构建约 90 秒，是整轮里最贵的等待。
 - 发布前如果改了代码，先跑 `verify` skill，别把失败带上线。
+
+统一纪律见 AGENTS.md 的「上下文纪律」：大输出落盘、grep 先于 read、大日志交给子代理、多步合成一次命令。

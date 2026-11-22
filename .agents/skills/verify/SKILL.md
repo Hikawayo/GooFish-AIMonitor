@@ -18,3 +18,5 @@ pwsh -File scripts/verify.ps1 -Frontend    # 再加前端构建
 - 失败输出第一处失败 + 日志路径；需要定位时只读 `data/verify.log` 末尾 20 行，不要把整段测试输出搬进回复。
 - 同一会话里不要每改一个文件就跑一次：**改完一批再跑**，一次约 10 秒。
 - 权威命令就是这两个（`.venv\Scripts\python.exe -m pytest -q` 与 `npx pyright`）；内置诊断不可信。
+
+统一纪律见 AGENTS.md 的「上下文纪律」：大输出落盘、grep 先于 read、大日志交给子代理、多步合成一次命令。
