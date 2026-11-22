@@ -23,6 +23,18 @@
 - **GitHub**：期间 `github.com:443` 中断过，恢复后已推送；服务器工作副本用 `git bundle` 同步，未直接走 GitHub。
 - **既有能力**：逐条 AI 审核、提示词、搜索和 HTTPS 均已上线。`libatomic1` 构建补丁已进入 `Dockerfile`。
 
+## 2026-11-22 三个固定入口：deploy / verify / diagnose
+
+- **起因**：拆会话日志（29 轮、1035 次模型调用、估算累计输入 496M）后确认，成本 ≈ **步数 × 上下文**。部署、验证、查日志每次都靠多轮往返，还会把大段日志带进上下文，被后续每一次调用重复付费。
+- **脚本**（`scripts/`，都只输出一行）：
+  - `deploy.ps1`：git bundle → scp → 服务器 reset → compose build → up → 探活，输出 `deploy: <sha> | build ok | caddy 200 | 92s`；`-NoBuild` 跳过镜像构建（纯文档改动）。
+  - `verify.ps1`：pytest + pyright（`-Frontend` 再加前端构建），输出 `verify: 143 passed | pyright 0 errors | build ok`。
+  - `diagnose.ps1`：容器状态 + `last_obs` + 商品数 + 最近 2 条事件 + 最近 4 行错误，输出最多 8 行。
+- **三个项目 skill**：`.agents/skills/{deploy,verify,diagnose}/SKILL.md`（项目根 discovery，热加载已生效）。写法上刻意约束：**只贴那一行结果；详细过程在 `data/*.log`；需要时只读末尾 20 行；纯文档改动用 `-NoBuild`；同一会话的小改攒成一次发布**。
+- **密钥**：服务器地址与私钥路径放 `data/deploy.env`（已 gitignore），不进仓库。
+- **实测**：`verify` ≈ 12 秒输出一行；`diagnose` ≈ 5 秒输出 6 行；`deploy -NoBuild` 9 秒、完整 `deploy` 10 秒（命中构建缓存）。
+- `AGENTS.md` 的「验证命令」「部署」两节改为先指向这三个入口。
+
 ## 2026-11-22 抓取过程显示进度
 
 - **后端**：`runtime.set_progress(step, done, total)` / `clear_progress()`，`/api/status` 多返回 `progress`。`runner.crawl` 按阶段推进：打开闲鱼 → 检查登录 → 刷新闲鱼收藏 → 搜索「条件名」 → `核活 i/N` → `补抽属性 i/N`；`scan_recommendations` 增加 `on_watch` / `on_backfill` 回调，`sweep_liveness` 增加 `on_step`，`review_items` 增加 `on_item`。
