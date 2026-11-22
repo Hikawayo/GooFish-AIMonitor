@@ -57,9 +57,13 @@ function Chart({ data, width, mode, base, range, onRange, hover, onHover }) {
     const current = drag.current
     if (!current) {                       // 没在拖 → 更新悬停读数
       if (!visible.length) return
+      // 按 X 距离找最近的观测点: 时间桶不是等间距的, 用下标比例会落后于鼠标
       const localX = (event.clientX - box.left) / scale
-      const ratio = (localX - PAD.left) / Math.max(1, plotW)
-      onHover(visible[clamp(Math.round(ratio * (visible.length - 1)), 0, visible.length - 1)])
+      let nearest = 0
+      visible.forEach((point, index) => {
+        if (Math.abs(xIso(point.t) - localX) < Math.abs(xIso(visible[nearest].t) - localX)) nearest = index
+      })
+      onHover(visible[nearest])
       return
     }
     const dx = (event.clientX - current.x) / scale
@@ -105,6 +109,9 @@ function Chart({ data, width, mode, base, range, onRange, hover, onHover }) {
           <rect x={PAD.left} y={PAD.top} width={plotW} height={plotH} />
         </clipPath>
       </defs>
+
+      {/* 透明底: 没有它的话, 指针落在空白处不触发事件, 悬浮要扫到线上才有反应 */}
+      <rect x="0" y="0" width={width} height={HEIGHT} className="trend-bg" />
 
       {yTicks.map((value) => (
         <g key={`y${value}`}>

@@ -43,6 +43,7 @@ function PricePlot({ points }) {
       <svg ref={svg} viewBox={`0 0 ${width} ${height}`} role="img"
         aria-label={`挂牌价格趋势，最低 ${price(low)}，最高 ${price(high)}`}
         onMouseMove={move} onMouseLeave={() => setHover(null)}>
+        <rect x="0" y="0" width={width} height={height} className="trend-bg" />
         <line x1={pad} x2={width - pad} y1={height - pad} y2={height - pad} className="plot-axis" />
         <polyline points={coords.map(([x, y]) => `${x},${y}`).join(' ')} className="plot-line" />
         <circle cx={endX} cy={endY} r="4" className="plot-point" />
