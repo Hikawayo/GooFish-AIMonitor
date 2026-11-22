@@ -29,6 +29,35 @@ def test_scan_separates_search_hits_from_rule_filter(monkeypatch):
     assert (scan.raw, scan.scanned, scan.created) == (3, 0, 0)
 
 
+def test_search_rediscovers_drop_and_records_event(monkeypatch):
+    """搜索复看时降价也要进事件流, 且同价不重复记。"""
+    import json
+
+    from xianyu_crawler.config import Settings, Watch
+    from xianyu_crawler.models import Item
+
+    s = make_session("sqlite:///:memory:", create=True)
+    repo.add_watch(s, name="w", keywords='["x"]')
+    watch = repo.list_watches(s)[0]
+    item = Item(item_id="d1", title="票", url="u", price=1000)
+    repo.create_recommendation(s, item, "w", None, ok=True)
+    repo.save_watch_match(s, watch.id, item, True, None)
+
+    cheaper = [Item(item_id="d1", title="票", url="u", price=800)]
+    monkeypatch.setattr(service, "_search", lambda ctx, w, st: cheaper)
+    w = Watch(id=watch.id, name="w", keywords=["x"])
+    settings = Settings(review_enabled=False)
+
+    assert service.scan_recommendations(None, s, settings, [w]).drops == 1
+    events = [event for event in repo.recent_events(s) if event.type == "price_drop"]
+    assert len(events) == 1
+    assert json.loads(events[0].payload)["curr_price"] == 800
+
+    # 价格没再变 → 不重复记一条
+    assert service.scan_recommendations(None, s, settings, [w]).drops == 0
+    assert len([event for event in repo.recent_events(s) if event.type == "price_drop"]) == 1
+
+
 def test_scan_recommendations_llm_review(monkeypatch):
     from xianyu_crawler import review
     s = make_session("sqlite:///:memory:", create=True)

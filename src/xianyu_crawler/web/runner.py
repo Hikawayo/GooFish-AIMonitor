@@ -111,7 +111,8 @@ def crawl(watch_name: str | None = None) -> dict:
                 dead = service.sweep_liveness(ctx, s, settings)
                 notified = _notify(s, settings)
                 result = {"recommendations": scan.created, "scanned": scan.scanned, "raw": scan.raw,
-                          "drops": drops, "dead": dead, "notified": notified, "at": _now_iso()}
+                          "drops": drops + scan.drops, "dead": dead, "notified": notified,
+                          "at": _now_iso()}
     except Exception as e:  # noqa: BLE001 - 后台作业, 记录不抛
         logger.exception("抓取失败(scope=%s)", runtime.scope()[:8])
         result = {"error": str(e), "at": _now_iso()}

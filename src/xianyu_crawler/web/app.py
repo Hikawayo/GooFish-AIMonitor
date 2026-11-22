@@ -272,6 +272,14 @@ def api_rereview(s: Session = Depends(get_db)):
     return service.rereview_pending(s, settings)
 
 
+@app.delete("/api/favorites/{item_id}")
+def api_unfavorite(item_id: str, s: Session = Depends(get_db)):
+    """取消站内收藏, 商品退回待审推荐。"""
+    if not repo.clear_local_favorite(s, item_id):
+        raise HTTPException(404, "这件商品不在站内收藏里")
+    return {"ok": True}
+
+
 @app.post("/api/recommendations/{item_id}/approve")
 def api_approve(item_id: str, s: Session = Depends(get_db)):
     if not save_favorite_and_schedule(s, item_id):

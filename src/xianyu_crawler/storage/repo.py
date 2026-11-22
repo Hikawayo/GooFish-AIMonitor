@@ -116,6 +116,24 @@ def save_local_favorite(s: Session, item_id: str, item: Item | None = None,
     return True
 
 
+def clear_local_favorite(s: Session, item_id: str) -> bool:
+    """取消站内收藏: 退回收藏前的状态(回到待审队列), 价格历史保留。
+
+    闲鱼收藏夹同步来的商品不动 —— 那是账号里真实收藏的, 本站无权取消。
+    返回是否真的取消了。
+    """
+    row = s.get(ItemRow, item_id)
+    if row is None or not row.local_saved or row.favorited or row.source == "favorite":
+        return False
+    row.local_saved = False
+    row.shared_folder_key = None
+    row.favorited_at = None
+    if row.rec_status == "approved" and row.rec_ok is not False:
+        row.rec_status = "new"
+    s.commit()
+    return True
+
+
 def due_local_favorites(s: Session, interval_minutes: int, limit: int) -> list[ItemRow]:
     cutoff = _now() - timedelta(minutes=interval_minutes)
     query = (
@@ -286,6 +304,20 @@ def add_event(s: Session, item_id: str, type_: str, payload: dict) -> None:
     s.add(Event(item_id=item_id, type=type_,
                 payload=json.dumps(payload, ensure_ascii=False)))
     s.commit()
+
+
+def has_drop_event_at_price(s: Session, item_id: str, price: float, minutes: int = 180) -> bool:
+    """最近是否已经因为「跌到这个价」记过降价事件, 避免搜索和收藏复检重复记一条。"""
+    cutoff = _now() - timedelta(minutes=minutes)
+    rows = s.scalars(select(Event).where(Event.item_id == item_id, Event.type == "price_drop",
+                                         Event.created_at >= cutoff))
+    for event in rows:
+        try:
+            if float(json.loads(event.payload).get("curr_price")) == float(price):
+                return True
+        except (ValueError, TypeError):
+            continue
+    return False
 
 
 def unnotified_events(s: Session) -> list[Event]:

@@ -40,6 +40,39 @@ def test_seed_original_price_only_fills_an_earlier_gap():
     assert [point.price for point in repo.price_history(s, "p1")] == [1200, 900]
 
 
+def test_unfavorite_returns_item_to_pending_and_keeps_history():
+    """取消站内收藏: 回到待审队列, 价格历史与成交价都不动。"""
+    from xianyu_crawler.storage.db import make_session
+
+    s = make_session("sqlite:///:memory:", create=True)
+    repo.create_recommendation(s, Item(item_id="u1", title="票", url="u", price=1000), "票", ok=True)
+    assert repo.save_local_favorite(s, "u1") is True
+    row = s.get(ItemRow, "u1")
+    assert row is not None and row.local_saved and row.rec_status == "approved"
+    before = len(repo.price_history(s, "u1"))
+
+    assert repo.clear_local_favorite(s, "u1") is True
+    row = s.get(ItemRow, "u1")
+    assert row is not None
+    assert row.local_saved is False and row.rec_status == "new" and row.favorited_at is None
+    assert repo.is_collected(s, "u1") is False
+    assert len(repo.price_history(s, "u1")) == before     # 观测记录不删
+    assert repo.clear_local_favorite(s, "u1") is False    # 再点一次不许重复报成功
+
+
+def test_unfavorite_refuses_xianyu_favorites():
+    """闲鱼收藏夹同步来的商品不能在本站取消收藏。"""
+    from xianyu_crawler.storage.db import make_session
+
+    s = make_session("sqlite:///:memory:", create=True)
+    repo.upsert_item_with_price(s, Item(item_id="f1", title="票", url="u", price=1000), source="favorite")
+    row = s.get(ItemRow, "f1")
+    assert row is not None
+    row.favorited = True
+    s.commit()
+    assert repo.clear_local_favorite(s, "f1") is False
+
+
 def test_local_save_and_price_refresh_only_due_items(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime, "DB_URL", f"sqlite:///{tmp_path / 'favorites.db'}")
     monkeypatch.setenv("XIANYU_SSO_ENABLED", "false")

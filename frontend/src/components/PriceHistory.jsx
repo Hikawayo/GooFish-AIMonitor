@@ -64,10 +64,11 @@ function PricePlot({ points }) {
   )
 }
 
-function PriceDialog({ item, folder, close }) {
+function PriceDialog({ item, folder, close, onChange }) {
   const dialog = useRef(null)
   const [points, setPoints] = useState(null)
   const [error, setError] = useState('')
+  const [removing, setRemoving] = useState(false)
   useEffect(() => {
     dialog.current.showModal()
     let active = true
@@ -76,6 +77,18 @@ function PriceDialog({ item, folder, close }) {
       .catch((error) => { if (active) setError(error.message) })
     return () => { active = false }
   }, [item.item_id, folder])
+  const remove = async () => {
+    setRemoving(true)
+    try {
+      await api.unfavorite(item.item_id)
+      close()
+      onChange?.()
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setRemoving(false)
+    }
+  }
   const latest = points?.at(-1)
   return (
     <dialog ref={dialog} className="history-dialog" aria-label="价格记录" onClose={close}>
@@ -106,16 +119,21 @@ function PriceDialog({ item, folder, close }) {
             </details>
           </> : <p className="history-note">暂无价格记录</p>}
       <div className="history-actions">
+        {item.saved && (
+          <Button variant="ghost" disabled={removing} onClick={remove}>
+            {removing ? '取消中…' : '取消收藏'}
+          </Button>
+        )}
         <a className="btn btn-ghost" href={item.url} target="_blank" rel="noreferrer">打开闲鱼原帖</a>
       </div>
     </dialog>
   )
 }
 
-export default function PriceHistory({ item, folder }) {
+export default function PriceHistory({ item, folder, onChange }) {
   const [open, setOpen] = useState(false)
   return <>
     <Button variant="ghost" className="btn-sm history-trigger" onClick={() => setOpen(true)}>价格记录</Button>
-    {open && <PriceDialog item={item} folder={folder} close={() => setOpen(false)} />}
+    {open && <PriceDialog item={item} folder={folder} close={() => setOpen(false)} onChange={onChange} />}
   </>
 }

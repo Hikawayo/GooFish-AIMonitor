@@ -113,6 +113,7 @@ class ScanResult:
     created: int = 0
     scanned: int = 0
     raw: int = 0
+    drops: int = 0           # 搜索复看时发现的降价(与收藏复检合并计数)
     backfilled: int = 0      # 票务模板给历史商品补抽属性成功的条数
 
 
@@ -131,7 +132,7 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
         fresh: list[Item] = []
         seen: set[str] = set()
         known = {m.item_id: m for m in repo.watch_matches(session, w.id)} if w.id is not None else {}
-        watch_raw = watch_scanned = 0
+        watch_raw = watch_scanned = watch_drops = 0
         for item in _search(ctx, w, settings):
             if item.item_id in seen:
                 continue
@@ -142,11 +143,24 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
             watch_scanned += 1
             previous = known.get(item.item_id)
             if previous is not None:
-                repo.upsert_item_with_price(session, item, source="search")
+                prev_price = repo.upsert_item_with_price(session, item, source="search")
                 previous.price = item.price
                 previous.observed_at = repo._now()
                 repo.record_published_price(session, previous)
                 session.commit()
+                # 搜索再次看到时降价了, 也要进事件流(以前只有收藏复检会记, 于是
+                # 「价格记录里有变化, 实时事件里什么都没有」)
+                if prev_price is not None:
+                    drop = detect_drop(item.item_id, prev_price, item.price,
+                                       settings.min_drop_pct, settings.min_drop_abs)
+                    if drop and not repo.has_drop_event_at_price(session, item.item_id, item.price):
+                        repo.add_event(session, item.item_id, "price_drop", {
+                            "title": item.title, "url": item.url, "pic": item.pic_url,
+                            "reason": "搜索再次发现降价",
+                            "prev_price": drop.prev_price, "curr_price": drop.curr_price,
+                            "drop_abs": drop.drop_abs, "drop_pct": drop.drop_pct,
+                        })
+                        watch_drops += 1
                 continue
             if (repo.is_dead(session, item.item_id) or repo.is_muted(session, item.item_id)
                     or (w.id is None and (repo.has_been_recommended(session, item.item_id)
@@ -180,6 +194,7 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
                                {"title": item.title, "url": item.url, "price": item.price,
                                 "pic": item.pic_url, "watch": w.name})
         result.raw += watch_raw
+        result.drops += watch_drops
         result.scanned += watch_scanned
         result.created += watch_created
         logger.info("扫描「%s」关键词=%s: 搜索 %d 条 → 命中规则 %d 条 → 新增 %d 条",
@@ -373,7 +388,7 @@ def refresh_local_favorites(ctx, session: Session, settings: Settings) -> int:
                 repo.seed_original_price(session, row.item_id,
                                          reading.original_price, reading.published_at)
             drop = detect_drop(row.item_id, previous, reading.price, settings.min_drop_pct, settings.min_drop_abs)
-            if drop:
+            if drop and not repo.has_drop_event_at_price(session, row.item_id, reading.price):
                 repo.add_event(session, row.item_id, "price_drop", {
                     "title": row.title, "url": row.url, "pic": row.pic_url,
                     "reason": "站内收藏详情复检", "prev_price": drop.prev_price, "curr_price": drop.curr_price,

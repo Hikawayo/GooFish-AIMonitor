@@ -98,7 +98,7 @@ export default function Recommendations({ refreshKey, onToast }) {
               <span className="rec-drop">已降 {yuan(it.original_price - it.price)}</span>
             )}
           </div>
-          <PriceHistory item={it} />
+          <PriceHistory item={it} onChange={load} />
         </div>
         <div className="rec-meta">
           <Seller nick={it.seller_nick} />
@@ -241,7 +241,7 @@ export default function Recommendations({ refreshKey, onToast }) {
                 <div className="rec-body">
                   <a className="rec-title" href={item.url} target="_blank" rel="noreferrer">{item.title}</a>
                   <div className="rec-price-row"><div className="rec-price">{yuan(item.price)}</div>
-                    <PriceHistory item={item} folder={selected.id} />
+                    <PriceHistory item={item} folder={selected.id} onChange={load} />
                   </div>
                   {item.seller_nick && <div className="rec-meta"><Seller nick={item.seller_nick} /></div>}
                   <Attrs attrs={item.attrs} />

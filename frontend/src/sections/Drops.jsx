@@ -16,8 +16,10 @@ export default function Drops({ refreshKey }) {
   const [loadError, setLoadError] = useState('')
   const { watches, folders, shared, error } = useFolders(refreshKey, visibility)
 
+  const load = () => api.favorites().then(setItems).catch((error) => setLoadError(error.message))
+
   useEffect(() => {
-    api.favorites().then(setItems).catch((error) => setLoadError(error.message))
+    load()
   }, [refreshKey])
 
   if (items === null) return loadError ? <p role="alert">{loadError}</p> : <Spinner />
@@ -76,7 +78,7 @@ export default function Drops({ refreshKey }) {
                       <span className="rec-drop">已降 {yuan(it.original_price - it.price)}</span>
                     )}
                   </div>
-                  <PriceHistory item={it} />
+                  <PriceHistory item={it} onChange={load} />
                 </div>
                 {!it.dead && it.reduce_price > 0 && (
                   <Badge tone="drop">降 ¥{Math.round(it.reduce_price).toLocaleString('zh-CN')}</Badge>

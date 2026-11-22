@@ -46,6 +46,7 @@ export const api = {
   reviewPending: () => post('/api/recommendations/review'),
   approve: (id) => post(`/api/recommendations/${id}/approve`),
   reject: (id) => post(`/api/recommendations/${id}/reject`),
+  unfavorite: (id) => fetch(`/api/favorites/${id}`, { method: 'DELETE' }).then(J),
   mute: (id, days) => post(`/api/recommendations/${id}/mute?days=${days}`),
 
   favorites: () => fetch('/api/favorites').then(J),
