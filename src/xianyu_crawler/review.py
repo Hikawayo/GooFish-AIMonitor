@@ -45,8 +45,9 @@ class ReviewVerdict(BaseModel):
 _TICKET_ATTRS = (
     "\n\n本条件用「票务模板」：除 ok 与 reason 外，再从标题里抽取属性放进 attrs，"
     "抽不到就填 null，不要猜。字段："
-    'seat（"内场" / "看台" / "未知"）、qty（整数张数）、'
-    "bundle（布尔，是否多场或多物捆绑一起卖）、deposit（布尔，是否只收定金/尾款）、"
+    'seat（"内场" / "看台" / "未知"）、qty（整数张数，默认 1）、'
+    "bundle（布尔，是否**多张票或多场演出打包**一起卖；只带特典、赠品、小卡不算捆绑）、"
+    "deposit（布尔，是否**只收定金或尾款**、需要先提确才给票）、"
     'unit（"单张" / "合计" / "未知"，标价是单张价还是多张总价）。'
     '输出格式：[{"i":0,"ok":true,"reason":"一句话中文理由",'
     '"attrs":{"seat":"内场","qty":1,"bundle":false,"deposit":false,"unit":"单张"}}]'
