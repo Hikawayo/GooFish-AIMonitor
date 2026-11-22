@@ -139,15 +139,21 @@ def price_history(s: Session, item_id: str):
 
 
 def trend_rows(s: Session, watch_ids: list[int]):
-    """这些条件下全部商品的价格观测(升序), 供 trend.build 聚合。"""
-    item_ids = {match.item_id for match in
-                s.scalars(select(WatchMatch).where(WatchMatch.watch_id.in_(watch_ids)))}
+    """这些条件下「已确认匹配」商品的价格观测(升序), 供 trend.build 聚合。
+
+    只统计 AI 通过或还没人工裁决的匹配(ok 不是 False), 并排除自己忽略掉的商品:
+    AI 判否的兑换码、特典本来就不属于目标观测, 不该出现在走势里。
+    """
+    item_ids = {match.item_id for match in s.scalars(
+        select(WatchMatch).where(WatchMatch.watch_id.in_(watch_ids),
+                                 or_(WatchMatch.ok.is_(True), WatchMatch.ok.is_(None))))}
     if not item_ids:
         return []
     return s.execute(
         select(PriceHistory.item_id, ItemRow.title, PriceHistory.observed_at, PriceHistory.price)
         .join(ItemRow, ItemRow.item_id == PriceHistory.item_id)
-        .where(PriceHistory.item_id.in_(item_ids))
+        .where(PriceHistory.item_id.in_(item_ids),
+               or_(ItemRow.rec_status.is_(None), ItemRow.rec_status != "rejected"))
         .order_by(PriceHistory.observed_at.asc(), PriceHistory.id.asc())
     ).all()
 

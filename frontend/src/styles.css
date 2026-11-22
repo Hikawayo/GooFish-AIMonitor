@@ -300,7 +300,7 @@ button { font-family: inherit; }
 .trend-toggle:hover { color: var(--fg); background: var(--s2); }
 .trend-readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 11.5px; color: var(--dim); margin: 10px 0 6px; font-variant-numeric: tabular-nums; }
 .trend-sum { margin-left: auto; }
-.trend-svg { display: block; width: 100%; height: auto; }
+.trend-svg { display: block; width: 100%; height: auto; touch-action: none; }
 .trend-grid { stroke: var(--line); stroke-width: 1; }
 .trend-axis { fill: var(--dim); font-size: 10.5px; }
 .trend-item-line { stroke: color-mix(in srgb, var(--fg) 20%, transparent); stroke-width: 1; }
@@ -308,13 +308,17 @@ button { font-family: inherit; }
 .trend-min-line { stroke: var(--acc); stroke-width: 2; }
 .trend-cursor { stroke: var(--line2); stroke-width: 1; }
 .trend-dot { fill: var(--acc); }
+/* 可拖的四条边: 虚线示意可动, 中间的圆角把是抓取点 */
+.trend-handle { stroke: color-mix(in srgb, var(--acc) 45%, transparent); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.trend-grip { fill: var(--acc); opacity: .9; }
+.trend-hit { fill: transparent; }
 .trend-legend { display: flex; gap: 14px; font-size: 11px; color: var(--dim); margin-top: 8px; }
 .trend-legend i { display: inline-block; width: 14px; height: 2px; margin-right: 5px; vertical-align: middle; }
 .trend-key-min { background: var(--acc); }
 .trend-key-median { background: color-mix(in srgb, var(--fg) 45%, transparent); }
 .trend-key-item { background: color-mix(in srgb, var(--fg) 20%, transparent); }
 .trend-empty { color: var(--dim); font-size: 12.5px; padding: 16px 2px 6px; }
-.trend-note { color: var(--dim); font-size: 11px; line-height: 1.5; margin-top: 6px; }
+
 
 .rec-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 11.5px; color: var(--dim); margin-bottom: 10px; }
 /* 卖家是决策信息: 首字母圆点 + 正常文字色, 让它一眼能扫到; 地区/成色继续用弱色 */

@@ -71,16 +71,20 @@ def test_price_trend_api(client):
     item = Item(item_id="i1", title="t", url="u", price=100)
     repo.create_recommendation(s, item, "w")
     repo.save_watch_match(s, watch.id, item, None, None)
+    junk = Item(item_id="i2", title="兑换码", url="u", price=3)
+    repo.create_recommendation(s, junk, "w")
+    repo.save_watch_match(s, watch.id, junk, False, "不符")   # AI 判否 → 不进走势
     s.add_all([PriceHistory(item_id="i1", price=price, observed_at=datetime(2026, 11, 20, hour))
                for hour, price in ((1, 100), (5, 90))])
-    # 建推荐时补的「现在」这一条会多出一个桶, 删掉只留上面两条
+    s.add(PriceHistory(item_id="i2", price=3, observed_at=datetime(2026, 11, 20, 2)))
+    # 建推荐时补的「现在」这一条会多出一个桶, 删掉只留上面几条
     s.execute(delete(PriceHistory).where(PriceHistory.observed_at > datetime(2026, 11, 21)))
     s.commit()
 
     body = client.get(f"/api/price-trend?watch_ids={watch.id}&mode=day&tz=480").json()
     assert body["mode"] == "day" and len(body["series"]) == 1
     assert body["series"][0]["min"] == 90 and body["series"][0]["count"] == 1
-    assert body["items"][0]["item_id"] == "i1" and len(body["items"][0]["points"]) == 1
+    assert [entry["item_id"] for entry in body["items"]] == ["i1"]
     assert body["from"] and body["from"].endswith("+00:00")
 
     assert client.get("/api/price-trend?watch_ids=999").json()["series"] == []
