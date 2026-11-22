@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -45,6 +47,19 @@ def reschedule(crawl_minutes: int, favorites_minutes: int) -> None:
         _scheduler.add_job(_run_for_scope, IntervalTrigger(minutes=max(1, minutes)),
                            args=(user_scope, name == "favorites"), id=f"{user_scope}:{name}",
                            max_instances=1, coalesce=True, replace_existing=True)
+
+
+def delay_after_manual(include_favorites: bool = True) -> None:
+    """手动跑完 → 把下一次定时往后推一个周期, 避免刚跑完又定时跑一遍。"""
+    if _scheduler is None:
+        return
+    scope = runtime.scope()
+    names = ["crawl", "favorites"] if include_favorites else ["crawl"]
+    for name in names:
+        job = _scheduler.get_job(f"{scope}:{name}")
+        if job is None:
+            continue
+        job.modify(next_run_time=datetime.now() + job.trigger.interval)
 
 
 def ensure_scheduled(crawl_minutes: int, favorites_minutes: int) -> None:

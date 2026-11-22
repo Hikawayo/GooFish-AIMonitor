@@ -374,6 +374,13 @@ def delete_watch(s: Session, watch_id: int) -> None:
         s.commit()
 
 
+def watch_last_runs(s: Session) -> dict[int, datetime]:
+    """每个条件最近一次跑到的时刻(取该组匹配记录的观测时间)。"""
+    rows = s.execute(select(WatchMatch.watch_id, func.max(WatchMatch.observed_at))
+                     .group_by(WatchMatch.watch_id)).all()
+    return {int(watch_id): stamp for watch_id, stamp in rows if stamp is not None}
+
+
 def watch_matches(s: Session, watch_id: int):
     return s.scalars(select(WatchMatch).where(WatchMatch.watch_id == watch_id))
 

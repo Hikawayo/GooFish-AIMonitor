@@ -59,7 +59,11 @@ def api_access():
 # ---------- watches ----------
 @app.get("/api/watches", response_model=list[dto.WatchOut])
 def api_list_watches(s: Session = Depends(get_db)):
-    return [dto.watchrow_to_out(w) for w in repo.list_watches(s)]
+    last_runs = repo.watch_last_runs(s)
+    return [
+        dto.watchrow_to_out(w).model_copy(update={"last_run_at": dto._iso(last_runs.get(w.id))})
+        for w in repo.list_watches(s)
+    ]
 
 
 @app.post("/api/watches", response_model=dto.WatchOut)
@@ -370,7 +374,7 @@ def api_run(watch: str | None = None, s: Session = Depends(get_db)):
         raise HTTPException(409, reason)
     if runner.busy():          # 浏览器作业全局串行, 忙的时候明确拒绝而不是静默跳过
         raise HTTPException(409, "正在抓取中，请稍后")
-    runtime.start_thread(runner.crawl, watch)
+    runtime.start_thread(runner.crawl_manual, watch)
     return {"status": "queued", "scope": watch or "all"}
 
 

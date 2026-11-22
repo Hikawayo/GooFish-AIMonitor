@@ -125,6 +125,18 @@ def crawl(watch_name: str | None = None) -> dict:
     return result
 
 
+def crawl_manual(watch_name: str | None = None) -> dict:
+    """手动触发的抓取: 跑完把下一次定时往后推一个周期。
+
+    只跑单个条件时不刷新收藏, 所以只推迟 crawl; 全量才连收藏任务一起推迟。
+    """
+    result = crawl(watch_name)
+    if not result.get("skipped"):
+        from . import scheduler
+        scheduler.delay_after_manual(include_favorites=watch_name is None)
+    return result
+
+
 def refresh_favorites() -> dict:
     """收藏刷新(独立定时任务, 默认每 30 分钟): 在线读闲鱼收藏夹,
     更新价格/死链/收藏后降价, 命中降价发邮件。锁忙/已暂停则跳过。

@@ -288,7 +288,12 @@ export default function App() {
                 {watchList.map((w) => (
                   <button key={w.id} onClick={() => run(w.name)} title={(w.keywords || []).join(' ')}>
                     <i className="ti ti-target" />
-                    {w.name}
+                    <span className="run-label">
+                      <span className="run-name">{w.name}</span>
+                      {w.last_run_at && (
+                        <span className="run-when">最后更新 {fmtDateTime(w.last_run_at)}</span>
+                      )}
+                    </span>
                     {w.enabled === false && <span className="run-off">已停用</span>}
                   </button>
                 ))}

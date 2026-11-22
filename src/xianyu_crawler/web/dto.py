@@ -33,6 +33,7 @@ class WatchIn(BaseModel):
 
 class WatchOut(WatchIn):
     id: int
+    last_run_at: str | None = None      # 这个条件最近一次跑到的时间
 
 
 class ConfigIn(BaseModel):
