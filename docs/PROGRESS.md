@@ -23,6 +23,14 @@
 - **GitHub**：期间 `github.com:443` 中断过，恢复后已推送；服务器工作副本用 `git bundle` 同步，未直接走 GitHub。
 - **既有能力**：逐条 AI 审核、提示词、搜索和 HTTPS 均已上线。`libatomic1` 构建补丁已进入 `Dockerfile`。
 
+## 2026-11-22 取消收藏 + 降价事件漏记
+
+- **取消收藏**：`repo.clear_local_favorite` + `DELETE /api/favorites/{item_id}`；「价格记录」弹窗底部在已收藏时出现「取消收藏」，取消后回到待审队列（`rec_status: approved → new`）、清掉收藏时间与公开文件夹标记，**价格观测历史保留**。闲鱼收藏夹同步来的商品拒绝取消（`source == "favorite"` 或 `favorited`），那是账号里真实存在的收藏。DTO 新增 `saved` 字段驱动按钮显隐。
+- **降价不进事件流（真 bug）**：有两条路会更新价格——收藏详情复检（会记事件）和搜索复看（`scan_recommendations`，只写 `price_history`，从不记事件）。所以「价格记录里有变化，实时事件里什么都没有」。线上证据：近 6 小时 5 次变价、0 条对应事件，其中一次 ¥2,950 → ¥2,050（−31%）。
+- **修复**：搜索复看时也走 `detect_drop` 记 `price_drop`，`ScanResult` 增加 `drops`，本轮完成提示的「降价 N」= 收藏复检 + 搜索复看；新增 `repo.has_drop_event_at_price`（同一商品同一价格 180 分钟内不重复记），收藏复检也用它去重。
+- **阈值提醒**：`min_drop_pct=5` / `min_drop_abs=50`，两者都不满足的微小变动**按设计不记事件**（例如 −2.6% 那次）。
+- 验证：142 项 pytest（取消收藏两条、搜索降价事件与去重）、Pyright 0；本地浏览器实测收藏 → 价格记录出现「取消收藏」→ 点击后弹窗关闭、收藏页清空、商品回到待审推荐。
+
 ## 2026-11-22 右侧文件夹栏可调宽
 
 - 新增 `components/FolderLayout.jsx`：分割条左右拖动改宽度（200–460px，默认 280），**点一下收起 / 再点展开**；宽度与收起状态记在 `localStorage`（`xy-folder-w` / `xy-folder-collapsed`），只影响本机。收起后右边缘留一个 26px 的小按钮，否则收起来就找不回来了。
