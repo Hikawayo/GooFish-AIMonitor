@@ -23,6 +23,13 @@
 - **GitHub**：期间 `github.com:443` 中断过，恢复后已推送；服务器工作副本用 `git bundle` 同步，未直接走 GitHub。
 - **既有能力**：逐条 AI 审核、提示词、搜索和 HTTPS 均已上线。`libatomic1` 构建补丁已进入 `Dockerfile`。
 
+## 2026-11-22 运行菜单显示最后更新时间；手动跑推迟定时
+
+- **每个条件的最后更新时间**：`repo.watch_last_runs`（按 `WatchMatch.observed_at` 取每组最大值）→ `WatchOut.last_run_at`；「立即运行」菜单里条件名下面显示「最后更新 MM-DD HH:mm」。线上取到的是 `18:53`，与最后一轮抓取一致。
+- **手动跑会把定时往后推**：以前 APScheduler 的 interval 从上次**定时**触发算，手动跑完不影响，于是可能手动刷完十分钟又定时刷一次。现在 `runner.crawl_manual` 跑完调用 `scheduler.delay_after_manual`，把 job 的 `next_run_time` 设为「现在 + 该 job 的间隔」；全量跑连收藏任务一起推，只跑单个条件时只推 crawl（那次本来就不刷收藏）。
+- **测试**：`test_manual_run_pushes_next_scheduled_time`——把下次运行拖到 1 分钟后，调用后回到约 120 分钟。143 项 pytest、Pyright 0 error。
+- 未改：定时任务**自己**跑完不再额外推（APScheduler 已按 start 时间 + 间隔算），避免每轮漂移。
+
 ## 2026-11-22 排序默认值与站内下拉框
 
 - **默认排序改为「价格：从高到低」**（`ItemSort` 的 `DEFAULT_SORT`），推荐页与收藏页一致。
