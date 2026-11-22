@@ -114,6 +114,7 @@ class ScanResult:
     scanned: int = 0
     raw: int = 0
     drops: int = 0           # 搜索复看时发现的降价(与收藏复检合并计数)
+    warning: str | None = None  # 跑完了但结果可疑(例如某个条件一条都没搜到)
     backfilled: int = 0      # 票务模板给历史商品补抽属性成功的条数
 
 
@@ -196,6 +197,9 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
                 repo.add_event(session, item.item_id, "new_recommendation",
                                {"title": item.title, "url": item.url, "price": item.price,
                                 "pic": item.pic_url, "watch": w.name})
+        if watch_raw == 0 and w.enabled:
+            # 一条都没搜到而这条条件本来是有结果的 → 多半被风控或页面异常, 必须让用户看见
+            result.warning = f"「{w.name}」一条都没搜到，可能被风控或列表没加载出来"
         result.raw += watch_raw
         result.drops += watch_drops
         result.scanned += watch_scanned

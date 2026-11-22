@@ -124,6 +124,8 @@ def crawl(watch_name: str | None = None) -> dict:
                 notified = _notify(s, settings)
                 result = {"recommendations": scan.created, "scanned": scan.scanned, "raw": scan.raw,
                           "scope": watch_name, "notified": notified, "at": _now_iso()}
+                if scan.warning:
+                    result["warn"] = scan.warning
             else:
                 # 先跑监控(刷新收藏列表入库, 含收藏夹死链), scan 才能据此过滤
                 runtime.set_progress("刷新闲鱼收藏", 2, total)
@@ -146,6 +148,8 @@ def crawl(watch_name: str | None = None) -> dict:
                 result = {"recommendations": scan.created, "scanned": scan.scanned, "raw": scan.raw,
                           "drops": drops + scan.drops, "dead": dead, "notified": notified,
                           "at": _now_iso()}
+                if scan.warning:
+                    result["warn"] = scan.warning
     except Exception as e:  # noqa: BLE001 - 后台作业, 记录不抛
         logger.exception("抓取失败(scope=%s)", runtime.scope()[:8])
         result = {"error": _friendly_job_error(e), "at": _now_iso()}

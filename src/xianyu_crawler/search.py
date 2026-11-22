@@ -13,7 +13,7 @@ from urllib.parse import quote
 from .config import Watch
 from .models import Item
 from .parsing import to_price, guess_condition, to_dt_ms
-from .anti_detect import human_scroll
+from .anti_detect import human_scroll, is_risk_control
 from .session import open_page
 
 SEARCH_URL = "https://www.goofish.com/search"
@@ -42,6 +42,19 @@ def _cumulative_original(ex: dict, price: float | None) -> float | None:
             if 1 <= pct <= 99:
                 return round(price / (1 - pct / 100), 2)
     return None
+
+
+def _no_result_reason(page) -> str:
+    """搜索一条响应都没拿到时, 尽量说清是风控、登录问题还是页面没加载出来。"""
+    url = (page.url or "").lower()
+    if any(k in url for k in ("login", "passport", "havana")):
+        return "闲鱼登录已失效，请到「设置 → 闲鱼登录」重新扫码"
+    try:
+        if is_risk_control(page):
+            return "闲鱼搜索被风控拦截（出现验证或滑块），稍后重试"
+    except Exception:  # noqa: BLE001 - 探测失败不影响原因判断
+        pass
+    return "搜索页没有返回商品列表（可能被风控或页面改版），稍后重试"
 
 
 def parse_search_json(raw: dict) -> list[Item]:

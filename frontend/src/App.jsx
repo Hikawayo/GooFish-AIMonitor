@@ -168,7 +168,8 @@ export default function App() {
           const drops = st.last.drops ?? 0
           showToast(
             `本轮完成：搜索 ${st.last.raw ?? 0} 条 · 命中 ${st.last.scanned ?? 0} 条 · 新推荐 ${st.last.recommendations ?? 0} 条`
-            + (drops ? ` · 降价 ${drops}` : ''),
+            + (drops ? ` · 降价 ${drops}` : '')
+            + (st.last.warn ? ` · ${st.last.warn}` : ''),
           )
         }
       }
@@ -357,11 +358,13 @@ export default function App() {
             <span style={{ width: `${percent}%` }} />
           </div>
         )}
-        {!running && status?.last?.error && dismissedError !== status.last.at && (
-          <div className="run-alert" role="alert">
-            <i className="ti ti-alert-triangle" />
+        {!running && (status?.last?.error || status?.last?.warn) && dismissedError !== status.last.at && (
+          <div className="run-alert" role="alert" data-kind={status.last.error ? 'error' : 'warn'}>
+            <i className={'ti ' + (status.last.error ? 'ti-alert-triangle' : 'ti-alert-circle')} />
             <span>
-              上一轮抓取没有跑成：{status.last.error}
+              {status.last.error
+                ? `上一轮抓取没有跑成：${status.last.error}`
+                : `上一轮跑完了，但结果可疑：${status.last.warn}`}
               <time>{fmtDateTime(status.last.at)}</time>
             </span>
             <button className="btn btn-sm" onClick={() => run(null)}>重试</button>

@@ -194,7 +194,10 @@ button { font-family: inherit; }
   border: 1px solid var(--warn); border-radius: var(--rad);
   background: var(--s1); color: var(--fg); font-size: 12.5px; line-height: 1.5;
 }
-.run-alert i.ti-alert-triangle { color: var(--warn); font-size: 15px; flex: none; }
+.run-alert i.ti-alert-triangle, .run-alert i.ti-alert-circle { color: var(--warn); font-size: 15px; flex: none; }
+/* 只跑完但有可疑结果时用琥珀色, 和"跑失败"区分开 */
+.run-alert[data-kind='warn'] { border-color: var(--acc); }
+.run-alert[data-kind='warn'] i.ti-alert-circle { color: var(--acc); }
 .run-alert span { flex: 1; min-width: 0; }
 .run-alert time { margin-left: 8px; color: var(--dim); font-size: 11px; }
 .run-alert .btn { flex: none; }

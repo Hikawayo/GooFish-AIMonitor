@@ -29,6 +29,20 @@ def test_scan_separates_search_hits_from_rule_filter(monkeypatch):
     assert (scan.raw, scan.scanned, scan.created) == (3, 0, 0)
 
 
+def test_scan_warns_when_a_watch_returns_nothing(monkeypatch):
+    """搜索 0 条不能被当成"正常跑完": 要带 warning, 否则用户以为刷新过了。"""
+    from xianyu_crawler.config import Settings, Watch
+
+    s = make_session("sqlite:///:memory:", create=True)
+    repo.add_watch(s, name="w", keywords='["x"]')
+    watch = repo.list_watches(s)[0]
+    monkeypatch.setattr(service, "_search", lambda ctx, w, st: [])
+    result = service.scan_recommendations(None, s, Settings(review_enabled=False),
+                                          [Watch(id=watch.id, name="w", keywords=["x"])])
+    assert result.warning is not None
+    assert "一条都没搜到" in result.warning
+
+
 def test_search_rediscovers_drop_and_records_event(monkeypatch):
     """搜索复看时降价也要进事件流, 且同价不重复记。"""
     import json
