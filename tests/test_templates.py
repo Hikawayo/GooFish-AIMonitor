@@ -110,6 +110,16 @@ def test_general_watch_does_not_backfill(monkeypatch):
     assert repo.item_attrs_of(s, "k2") is None      # 通用条件不抽票务字段
 
 
+def test_watch_row_to_watch_keeps_kind():
+    """抓取走 watchrow_to_watch 这条映射; 漏拷 kind 会让票务模板永远不生效。"""
+    from xianyu_crawler import service
+
+    s = make_session("sqlite:///:memory:", create=True)
+    repo.add_watch(s, name="票", keywords='["x"]', requirement="内场", kind="ticket")
+    row = repo.list_watches(s)[0]
+    assert service.watchrow_to_watch(row).kind == "ticket"
+
+
 def test_attrs_persist_on_item():
     from xianyu_crawler.models import Item
     from xianyu_crawler.storage.orm import ItemRow

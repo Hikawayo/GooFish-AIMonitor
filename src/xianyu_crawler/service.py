@@ -54,6 +54,7 @@ def watchrow_to_watch(w: WatchRow) -> Watch:
         free_shipping=w.free_shipping,
         seller_min_credit=w.seller_min_credit,
         requirement=w.requirement,
+        kind=w.kind or "general",
         enabled=w.enabled,
     )
 
