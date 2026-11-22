@@ -161,13 +161,16 @@ def api_price_trend(watch_ids: str = "", mode: str = "all", tz: int = 480,
     comparable = {item_id for item_id, meta in attrs.items() if trend.is_comparable(meta)}
     data = trend.build(repo.trend_rows(s, ids), mode=mode, tz_minutes=tz, min_price=min_price,
                        comparable_ids=comparable if attrs else None)
+    # 只统计真的画进图里的商品, 否则会把已被筛掉的兑换码也算进「另有 N 件」
+    drawn = {item["item_id"] for item in data["items"]}
+    stats_excluded = sum(1 for item_id in drawn if not trend.is_comparable(attrs.get(item_id)))
     return {
         "mode": data["mode"],
         "from": dto._iso(data["from"]),
         "to": dto._iso(data["to"]),
         "observations": data["observations"],
         "items_total": data["items_total"],
-        "stats_excluded": max(0, len(attrs) - len(comparable)),
+        "stats_excluded": stats_excluded,
         "auto_floor": data["auto_floor"],
         "excluded": data["excluded"],
         "series": [{"t": dto._iso(point["t"]), "min": point["min"],
