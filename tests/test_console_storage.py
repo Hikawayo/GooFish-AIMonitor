@@ -10,6 +10,35 @@ def session():
     return make_session("sqlite:///:memory:", create=True)
 
 
+def test_legacy_default_prompt_resets_but_keeps_custom(tmp_path):
+    """旧版默认提示词清空回落新默认; 用户自己写的原样保留。"""
+    import sqlite3
+
+    from xianyu_crawler.storage import migrate
+
+    legacy = tmp_path / "legacy.db"
+    con = sqlite3.connect(legacy)
+    con.execute("CREATE TABLE app_config (id INTEGER PRIMARY KEY, review_system_prompt TEXT)")
+    con.execute("INSERT INTO app_config VALUES (1, ?)", (migrate.LEGACY_DEFAULT_PROMPT,))
+    con.commit()
+    con.close()
+    migrate.ensure_columns(legacy)
+    con = sqlite3.connect(legacy)
+    assert con.execute("SELECT review_system_prompt FROM app_config").fetchone()[0] is None
+    con.close()
+
+    custom = tmp_path / "custom.db"
+    con = sqlite3.connect(custom)
+    con.execute("CREATE TABLE app_config (id INTEGER PRIMARY KEY, review_system_prompt TEXT)")
+    con.execute("INSERT INTO app_config VALUES (1, '我自己写的提示词')")
+    con.commit()
+    con.close()
+    migrate.ensure_columns(custom)
+    con = sqlite3.connect(custom)
+    assert con.execute("SELECT review_system_prompt FROM app_config").fetchone()[0] == "我自己写的提示词"
+    con.close()
+
+
 def test_first_write_seeds_publish_price():
     """首次入库知道原价与发布时间时, 先补这个起点, 走势不从半路开始。"""
     from datetime import datetime

@@ -9,8 +9,7 @@ import sqlite3
 from pathlib import Path
 
 # (table, column, "DDL 类型 + 默认值") — 仅在列缺失时 ALTER ADD COLUMN
-COLUMNS: list[tuple[str, str, str]] = [
-    ("items", "first_price", "REAL"),
+COLUMNS: list[tuple[str, str, str]] = [    ("items", "first_price", "REAL"),
     ("items", "original_price", "REAL"),
     ("items", "rec_reason", "TEXT"),
     ("items", "rec_ok", "BOOLEAN"),
@@ -61,6 +60,15 @@ def _cols(con: sqlite3.Connection, table: str) -> set[str]:
     return {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
 
 
+# 旧版默认提示词。存着这段的库说明用户从没自己改过, 清空让它回落到新的默认值;
+# 用户自己写过的提示词原样保留。
+LEGACY_DEFAULT_PROMPT = (
+    "你是二手商品相关性筛选助手。判断每个商品是否符合用户的「要求」"
+    "(型号/规格/成色/价格/正品等综合判断)。"
+    "严格判断: 不确定或明显不符、或疑似钓鱼/配件 就 ok=false。"
+)
+
+
 def ensure_columns(db_path: str | Path) -> int:
     """给 db_path 补齐缺失列, 返回新增列数。表不存在则跳过(留给 create_all)。"""
     path = Path(db_path)
@@ -75,6 +83,9 @@ def ensure_columns(db_path: str | Path) -> int:
                 continue
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
             added += 1
+        if _cols(con, "app_config"):
+            con.execute("UPDATE app_config SET review_system_prompt = NULL "
+                        "WHERE review_system_prompt = ?", (LEGACY_DEFAULT_PROMPT,))
         if _cols(con, "watch_matches"):
             con.execute("""
                 INSERT OR IGNORE INTO watch_matches
