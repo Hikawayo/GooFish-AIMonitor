@@ -7,6 +7,7 @@ import Drops from './sections/Drops'
 import Watches from './sections/Watches'
 import Settings from './sections/Settings'
 import ThemeEditor from './components/ThemeEditor'
+import Notice, { NOTICE_VERSION } from './components/Notice'
 import { PRESETS, loadTheme, paletteOf, saveTheme, themeVars } from './theme'
 
 const NAV = [
@@ -87,6 +88,14 @@ export default function App() {
   const { pathname } = useLocation()
   const [theme, setTheme] = useState(loadTheme)
   const [themeOpen, setThemeOpen] = useState(false)
+  // 公告: 没看过(或版本更新了)就自动弹一次, 之后从顶栏入口再打开
+  const [noticeOpen, setNoticeOpen] = useState(() => {
+    try {
+      return localStorage.getItem('xy-notice') !== NOTICE_VERSION
+    } catch {
+      return true
+    }
+  })
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('xy-side') === '1')
   const [status, setStatus] = useState(null)
   const [stats, setStats] = useState(ZERO)
@@ -112,6 +121,14 @@ export default function App() {
     setTheme({ key: 'custom', custom })
     saveTheme('custom', custom)
     setThemeOpen(false)
+  }
+  const closeNotice = () => {
+    try {
+      localStorage.setItem('xy-notice', NOTICE_VERSION)
+    } catch {
+      /* 存不了就只在本次会话记住 */
+    }
+    setNoticeOpen(false)
   }
   const toggleSide = () => {
     setCollapsed((c) => {
@@ -207,6 +224,14 @@ export default function App() {
           {running ? '抓取中…' : login.has_state ? '' : '未登录'}
         </div>
         <div className="skins">
+          <button
+            className="notice-btn"
+            title="使用说明与更新日志"
+            aria-label="使用说明与更新日志"
+            onClick={() => setNoticeOpen(true)}
+          >
+            <i className="ti ti-info-circle" />
+          </button>
           {PRESETS.map((preset) => (
             <button
               key={preset.key}
@@ -370,6 +395,8 @@ export default function App() {
           onClose={() => setThemeOpen(false)}
         />
       )}
+
+      <Notice open={noticeOpen} onClose={closeNotice} />
 
       {toast && <div className="toast">{toast}</div>}
     </div>
