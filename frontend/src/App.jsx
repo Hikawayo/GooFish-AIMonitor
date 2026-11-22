@@ -217,7 +217,7 @@ export default function App() {
           <span className="mk">
             <i className="ti ti-bolt" />
           </span>
-          闲鱼控制台
+          海鲜价格监控
         </div>
         <div className="grow" />
         <div className="live" role="status">

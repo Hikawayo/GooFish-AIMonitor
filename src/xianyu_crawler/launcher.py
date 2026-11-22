@@ -22,7 +22,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 HOST, PORT = "127.0.0.1", 8000
-WINDOW_TITLE = "闲鱼控制台"
+WINDOW_TITLE = "海鲜价格监控"
 
 
 def _user_data_dir() -> Path:
@@ -158,7 +158,7 @@ def main() -> None:
 
     port = _pick_port(PORT)   # 8000 被占(如 Docker 版在跑)就自动换空闲端口
     url = f"http://{HOST}:{port}"
-    print(f">> 闲鱼控制台: {url} (数据目录: {os.environ['XIANYU_DATA_DIR']})")
+    print(f">> 海鲜价格监控: {url} (数据目录: {os.environ['XIANYU_DATA_DIR']})")
 
     # 服务跑后台线程, 主线程留给原生窗口(WKWebView 必须在主线程)
     config = uvicorn.Config(app, host=HOST, port=port, log_level="warning")

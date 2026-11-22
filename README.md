@@ -1,13 +1,13 @@
 <div align="center">
 
-# 🐟 GooFish-AIMonitor · 闲鱼智能监控控制台
+# 🐟 GooFish-AIMonitor · 海鲜价格监控
 
 帮你盯着闲鱼：按你的要求自动搜货、请大模型逐个把关，收藏的东西一降价就提醒。
 全程跑在你自己电脑上，打开浏览器就能用，数据不外传。
 
 <br/>
 
-![闲鱼控制台 · 推荐页](docs/screenshots/hero-recommendations.png)
+![海鲜价格监控 · 推荐页](docs/screenshots/hero-recommendations.png)
 
 <br/>
 

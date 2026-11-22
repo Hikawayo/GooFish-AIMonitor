@@ -37,7 +37,7 @@ export default function Notice({ open, onClose }) {
       <div className="modal notice-dialog" role="dialog" aria-label="公告"
         onClick={(event) => event.stopPropagation()}>
         <div className="notice-head">
-          <h2>欢迎使用闲鱼控制台</h2>
+          <h2>欢迎使用海鲜价格监控</h2>
           <button type="button" className="notice-close" aria-label="关闭" onClick={onClose}>
             <i className="ti ti-x" />
           </button>

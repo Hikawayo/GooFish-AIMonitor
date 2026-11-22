@@ -17,7 +17,7 @@ from ..models import Item
 from ..storage import repo
 from ..storage.orm import ItemRow, WatchFolder, WatchMatch
 
-app = FastAPI(title="闲鱼控制台")
+app = FastAPI(title="海鲜价格监控")
 
 
 @app.middleware("http")

@@ -142,11 +142,11 @@ def format_email_html(events: list[dict]) -> str:
         '<div style="background:#f6f9fc;padding:20px 0;margin:0;'
         "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;\">"
         '<div style="max-width:640px;margin:0 auto;padding:0 16px;">'
-        '<div style="font-size:19px;font-weight:700;color:#0a2540;">🐟 闲鱼控制台</div>'
+        '<div style="font-size:19px;font-weight:700;color:#0a2540;">🐟 海鲜价格监控</div>'
         f'<div style="font-size:13px;color:#697386;margin:3px 0 6px;">{_esc(summary)}</div>'
         f'{body}'
         '<div style="font-size:11px;color:#9aa5b1;text-align:center;margin-top:20px;">'
-        '由「闲鱼控制台」自动发送 · 点卡片直达商品</div></div></div>'
+        '由「海鲜价格监控」自动发送 · 点卡片直达商品</div></div></div>'
     )
 
 
@@ -168,8 +168,8 @@ def send_test(settings) -> None:
                if not getattr(settings, k, None)]
     if missing:
         raise ValueError("SMTP 配置不完整, 缺: " + ", ".join(missing))
-    msg = MIMEText("这是一封来自闲鱼控制台的测试邮件，收到说明 SMTP 配置成功。", "plain", "utf-8")
-    msg["Subject"] = Header("闲鱼控制台 · 测试邮件", "utf-8").encode()
+    msg = MIMEText("这是一封来自海鲜价格监控的测试邮件，收到说明 SMTP 配置成功。", "plain", "utf-8")
+    msg["Subject"] = Header("海鲜价格监控 · 测试邮件", "utf-8").encode()
     msg["From"] = settings.smtp_user
     msg["To"] = settings.notify_to
     with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port) as srv:

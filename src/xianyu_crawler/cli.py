@@ -53,7 +53,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
     finally:
         s.close()
     scheduler.start(crawl_minutes, fav_minutes)
-    print(f">> 闲鱼控制台: http://{args.host}:{args.port}")
+    print(f">> 海鲜价格监控: http://{args.host}:{args.port}")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 
@@ -72,7 +72,7 @@ def cmd_test_email(args: argparse.Namespace) -> None:
               "(XIANYU_SMTP_HOST/USER/PASS, 收件人默认从控制台配置取)。")
         return
     try:
-        notifier.send_email(settings, "闲鱼控制台 SMTP 测试", "配置成功 ✅ 这是一封测试邮件。")
+        notifier.send_email(settings, "海鲜价格监控 SMTP 测试", "配置成功 ✅ 这是一封测试邮件。")
         print(f">> 已发送到 {settings.notify_to}，去收件箱确认。")
     except Exception as e:  # noqa: BLE001
         print(f"!! 发送失败 {type(e).__name__}: {e}")

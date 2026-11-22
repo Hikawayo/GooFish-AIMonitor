@@ -1,6 +1,6 @@
 # AGENTS.md — 给 AI 协作者的工程指南
 
-闲鱼控制台：本地运行的闲鱼选品(R1) + 降价监控(R2) Web 控制台。Python 3.12+ / Playwright(sync) / SQLAlchemy 2 / FastAPI + APScheduler / React + Vite。面向人类的说明见 [`README.md`](README.md)。
+海鲜价格监控：本地运行的闲鱼选品(R1) + 降价监控(R2) Web 控制台。Python 3.12+ / Playwright(sync) / SQLAlchemy 2 / FastAPI + APScheduler / React + Vite。面向人类的说明见 [`README.md`](README.md)。
 
 ## 本 Fork 的开发原则
 
