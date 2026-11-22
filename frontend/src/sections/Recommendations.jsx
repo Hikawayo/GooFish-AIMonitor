@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
-import { Card, Button, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
+import { Attrs, Card, Button, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
 import { yuan, fmtDate, fmtDateTime, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
 import ItemSort, { sortItems } from '../components/ItemSort'
@@ -105,6 +105,7 @@ export default function Recommendations({ refreshKey, onToast }) {
           {it.location && <span>{it.location}</span>}
           {it.condition && <span>{it.condition}</span>}
         </div>
+        <Attrs attrs={it.attrs} />
         {(it.browse_count != null || it.want_count != null || it.collect_count != null) && (
           <div className="rec-stats">
             {it.browse_count != null && <span title="浏览次数">👁 浏览 {it.browse_count}</span>}

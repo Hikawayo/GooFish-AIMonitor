@@ -37,10 +37,24 @@ class ReviewVerdict(BaseModel):
     reason: str = ""
     # 审核没真正跑(未启用/调用失败) → 调用方不要把 ok 当作裁决
     skipped: bool = False
+    # 票务模板顺便抽取的属性; 通用模板/没抽到 → None
+    attrs: dict | None = None
+
+
+# 票务模板要模型额外回的结构化属性。只收这几个键, 其余一律丢掉。
+_TICKET_ATTRS = (
+    "\n\n本条件用「票务模板」：除 ok 与 reason 外，再从标题里抽取属性放进 attrs，"
+    "抽不到就填 null，不要猜。字段："
+    'seat（"内场" / "看台" / "未知"）、qty（整数张数）、'
+    "bundle（布尔，是否多场或多物捆绑一起卖）、deposit（布尔，是否只收定金/尾款）、"
+    'unit（"单张" / "合计" / "未知"，标价是单张价还是多张总价）。'
+    '输出格式：[{"i":0,"ok":true,"reason":"一句话中文理由",'
+    '"attrs":{"seat":"内场","qty":1,"bundle":false,"deposit":false,"unit":"单张"}}]'
+)
 
 
 def review_items(items: list[Item], requirement: str | None,
-                 settings: Settings) -> list[ReviewVerdict]:
+                 settings: Settings, kind: str = "general") -> list[ReviewVerdict]:
     """按顺序单独审核每件商品，失败的条目保留供补审。"""
     if not settings.review_enabled:
         return [ReviewVerdict(ok=True, reason=REVIEW_MANUAL, skipped=True) for _ in items]
@@ -49,7 +63,7 @@ def review_items(items: list[Item], requirement: str | None,
     out: list[ReviewVerdict] = []
     for item in items:
         try:
-            content = _call_llm(_build_messages(item, requirement, settings), settings)
+            content = _call_llm(_build_messages(item, requirement, settings, kind), settings)
             out.append(_parse_verdict(content))
         except Exception as e:  # noqa: BLE001 - 审核失败保留本条
             logger.warning("单条 AI 审核失败: %s", _friendly_error(e))
@@ -57,17 +71,20 @@ def review_items(items: list[Item], requirement: str | None,
     return out
 
 
-def _build_messages(item: Item, requirement: str, settings: Settings) -> list[dict]:
+def _build_messages(item: Item, requirement: str, settings: Settings,
+                    kind: str = "general") -> list[dict]:
     meta = " | ".join(p for p in [
         f"¥{item.price:.0f}",
         f"成色:{item.condition}" if item.condition else "",
         f"地区:{item.location}" if item.location else "",
     ] if p)
+    ask = ('\n' + _TICKET_ATTRS) if kind == "ticket" else ""
     user = (
         f"要求: {requirement}\n\n"
         f"判断下面这件商品是否符合要求:\n0. {item.title}  [{meta}]"
         '\n\n只输出包含一项的 JSON 数组，格式为 [{"i":0,"ok":true,"reason":"一句话中文理由"}]。'
         'ok 按实际判断填 true 或 false。'
+        + ask
     )
     return [{"role": "system", "content": settings.review_system_prompt},
             {"role": "user", "content": user}]
@@ -115,6 +132,24 @@ def _coerce_array(content: str) -> list:
     raise ValueError("JSON 里没有 verdicts 数组")
 
 
+def _clean_attrs(raw: object) -> dict | None:
+    """只保留认识的键和合法值; 没抽到就是 None, 不拿默认值编造。"""
+    if not isinstance(raw, dict):
+        return None
+    out: dict = {}
+    if raw.get("seat") in ("内场", "看台", "未知"):
+        out["seat"] = raw["seat"]
+    qty = raw.get("qty")
+    if isinstance(qty, int) and not isinstance(qty, bool) and 1 <= qty <= 20:
+        out["qty"] = qty
+    for key in ("bundle", "deposit"):
+        if isinstance(raw.get(key), bool):
+            out[key] = raw[key]
+    if raw.get("unit") in ("单张", "合计", "未知"):
+        out["unit"] = raw["unit"]
+    return out or None
+
+
 def _parse_verdict(content: str) -> ReviewVerdict:
     verdicts = _coerce_array(content)
     if len(verdicts) != 1 or not isinstance(verdicts[0], dict):
@@ -122,7 +157,8 @@ def _parse_verdict(content: str) -> ReviewVerdict:
     verdict = verdicts[0]
     if verdict.get("i") not in (0, "0") or not isinstance(verdict.get("ok"), bool):
         raise ValueError("JSON 裁决缺少有效的商品序号或判断")
-    return ReviewVerdict(ok=verdict["ok"], reason=str(verdict.get("reason") or ""))
+    return ReviewVerdict(ok=verdict["ok"], reason=str(verdict.get("reason") or ""),
+                         attrs=_clean_attrs(verdict.get("attrs")))
 
 
 def _extract_json_array(text: str) -> list:

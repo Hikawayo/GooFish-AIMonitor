@@ -308,6 +308,9 @@ export default function PriceTrend({ watches, refreshKey }) {
                 <span><i className="trend-key-median" />中位数</span>
                 <span><i className="trend-key-item" />每件商品</span>
               </div>
+              {data.stats_excluded > 0 && (
+                <div className="trend-note">另 {data.stats_excluded} 件捆绑/定金未计入最低价与中位数</div>
+              )}
             </>)}
     </div>
   )

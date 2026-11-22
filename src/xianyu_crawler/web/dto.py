@@ -25,6 +25,7 @@ class WatchIn(BaseModel):
     free_shipping: bool | None = None
     seller_min_credit: int | None = None
     requirement: str | None = None
+    kind: str = "general"               # 模板: general(通用) / ticket(票务)
     enabled: bool = True
     public: bool = False
     folder_id: int | None = None
@@ -116,6 +117,7 @@ class RecommendationOut(BaseModel):
     url: str
     price: float
     original_price: float | None = None   # 卖家最初挂牌价(平台给), 比现价高才有意义
+    attrs: dict | None = None             # 模板抽取的属性(票务: 席种/张数/捆绑/定金)
     location: str | None = None
     condition: str | None = None
     free_shipping: bool | None = None
@@ -182,6 +184,7 @@ def watchin_to_fields(b: WatchIn) -> dict:
         "free_shipping": b.free_shipping,
         "seller_min_credit": b.seller_min_credit,
         "requirement": b.requirement,
+        "kind": b.kind,
         "enabled": b.enabled,
         "public": b.public,
         "folder_id": b.folder_id,
@@ -200,6 +203,7 @@ def watchrow_to_out(w: WatchRow) -> WatchOut:
         free_shipping=w.free_shipping,
         seller_min_credit=w.seller_min_credit,
         requirement=w.requirement,
+        kind=w.kind or "general",
         enabled=w.enabled,
         public=w.public,
         folder_id=w.folder_id,
@@ -247,6 +251,7 @@ def itemrow_to_rec(r: ItemRow) -> RecommendationOut:
     return RecommendationOut(
         item_id=r.item_id, title=r.title, url=r.url, price=r.latest_price,
         original_price=r.original_price,
+        attrs=json.loads(r.attrs) if r.attrs else None,
         location=r.location, condition=r.condition, free_shipping=r.free_shipping,
         seller_nick=r.seller_nick, watch_name=r.watch_name, pic_url=r.pic_url,
         want_count=r.want_count, browse_count=r.browse_count, collect_count=r.collect_count,

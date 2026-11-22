@@ -18,6 +18,7 @@ class Item(BaseModel):
     free_shipping: bool | None = None
     reduce_price: float | None = None   # 闲鱼原生"收藏后降价"金额(¥); 仅收藏数据有
     original_price: float | None = None  # 卖家最初挂牌价: 详情 originalPrice, 或按"累计降价X%"反推
+    attrs: dict | None = None           # 模板抽取的属性(票务: seat/qty/bundle...); 通用条件留空
     pic_url: str | None = None          # 商品主图
     publish_time: datetime | None = None  # 闲鱼发布时间(search 的 args.publishTime)
     dead: bool = False                  # 已售出/已删除/已下架(死链, 别再打开)

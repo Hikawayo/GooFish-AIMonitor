@@ -11,6 +11,8 @@ from pathlib import Path
 # (table, column, "DDL 类型 + 默认值") — 仅在列缺失时 ALTER ADD COLUMN
 COLUMNS: list[tuple[str, str, str]] = [    ("items", "first_price", "REAL"),
     ("items", "original_price", "REAL"),
+    ("items", "attrs", "TEXT"),
+    ("watches", "kind", "TEXT"),
     ("items", "rec_reason", "TEXT"),
     ("items", "rec_ok", "BOOLEAN"),
     ("items", "dead", "BOOLEAN NOT NULL DEFAULT 0"),

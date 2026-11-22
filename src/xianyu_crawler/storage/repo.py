@@ -32,6 +32,7 @@ def upsert_item_with_price(s: Session, item: Item, source: str,
                            watch_name: str | None = None) -> float | None:
     """写入/更新商品并追加一条价格观测; 返回更新前的 latest_price(无则 None)。"""
     reduce = item.reduce_price or 0.0
+    attrs = json.dumps(item.attrs, ensure_ascii=False) if item.attrs else None
     row = s.get(ItemRow, item.item_id)
     prev = row.latest_price if row else None
     created = row is None
@@ -42,7 +43,7 @@ def upsert_item_with_price(s: Session, item: Item, source: str,
                       free_shipping=item.free_shipping, pic_url=item.pic_url,
                       first_price=item.price, latest_price=item.price,
                       reduce_price=reduce, source=source, watch_name=watch_name,
-                      publish_time=item.publish_time,
+                      publish_time=item.publish_time, attrs=attrs,
                       dead=item.dead, dead_reason=item.dead_reason,
                       dead_at=_now() if item.dead else None)
         s.add(row)
@@ -56,6 +57,8 @@ def upsert_item_with_price(s: Session, item: Item, source: str,
         row.free_shipping = item.free_shipping
         row.pic_url = item.pic_url or row.pic_url
         row.seller_nick = item.seller_nick or row.seller_nick
+        if attrs:                                     # 抽到属性才覆盖, 没抽到保留旧的
+            row.attrs = attrs
         if item.publish_time and not row.publish_time:   # 补发布时间(收藏源没有)
             row.publish_time = item.publish_time
         row.last_seen_at = _now()
@@ -143,6 +146,25 @@ def price_history(s: Session, item_id: str):
     return list(reversed(list(s.scalars(select(PriceHistory).where(PriceHistory.item_id == item_id)
                                         .order_by(PriceHistory.observed_at.desc(), PriceHistory.id.desc())
                                         .limit(500)))))
+
+
+def item_attrs(s: Session, watch_ids: list[int]) -> dict[str, dict | None]:
+    """这些条件下各商品抽取到的属性(没抽到 → None), 用来判断能不能进价格统计。"""
+    if not watch_ids:
+        return {}
+    rows = s.execute(
+        select(ItemRow.item_id, ItemRow.attrs)
+        .join(WatchMatch, WatchMatch.item_id == ItemRow.item_id)
+        .where(WatchMatch.watch_id.in_(watch_ids))
+        .distinct()
+    ).all()
+    out: dict[str, dict | None] = {}
+    for item_id, raw in rows:
+        try:
+            out[str(item_id)] = json.loads(raw) if raw else None
+        except ValueError:
+            out[str(item_id)] = None
+    return out
 
 
 def trend_rows(s: Session, watch_ids: list[int]):

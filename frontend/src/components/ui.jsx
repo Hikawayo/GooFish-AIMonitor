@@ -17,14 +17,26 @@ export function Badge({ tone = '', children }) {
 }
 
 // 卖家: 首字母圆点做视觉锚点, 昵称用正常文字色; aria-label 保留「卖家」语义
-export function Seller({ nick }) {
-  if (!nick) return null
+export function Seller({ nick }) {  if (!nick) return null
   return (
     <span className="seller" aria-label={`卖家 ${nick}`} title={`卖家 ${nick}`}>
       <span className="seller-av" aria-hidden="true">{nick[0]}</span>
       <span className="seller-name">{nick}</span>
     </span>
   )
+}
+
+// 模板抽取到的属性: 只在有值时出现, 通用条件永远看不到这一行
+export function Attrs({ attrs }) {
+  if (!attrs) return null
+  const tags = []
+  if (attrs.seat && attrs.seat !== '未知') tags.push(attrs.seat)
+  if (attrs.qty > 1) tags.push(`${attrs.qty} 张`)
+  if (attrs.bundle) tags.push('捆绑')
+  if (attrs.deposit) tags.push('定金')
+  if (attrs.unit === '合计') tags.push('合计价')
+  if (!tags.length) return null
+  return <div className="rec-attrs">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
 }
 
 export function Spinner() {

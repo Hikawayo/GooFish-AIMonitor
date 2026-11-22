@@ -33,6 +33,7 @@ class ItemRow(Base):
     first_price: Mapped[float] = mapped_column(Float)
     latest_price: Mapped[float] = mapped_column(Float)
     original_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 卖家最初挂牌价
+    attrs: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # 模板抽取的属性(JSON)
     reduce_price: Mapped[float] = mapped_column(Float, default=0.0)  # 闲鱼"收藏后降价"金额
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=_now)   # 入库时间
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=_now)    # 最近抓取
@@ -92,6 +93,7 @@ class WatchRow(Base):
     free_shipping: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     seller_min_credit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     requirement: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # 自然语言要求(LLM审核)
+    kind: Mapped[Optional[str]] = mapped_column(String, nullable=True)       # 模板 general/ticket
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     public: Mapped[bool] = mapped_column(Boolean, default=False)
     folder_id: Mapped[Optional[int]] = mapped_column(ForeignKey("watch_folders.id"))

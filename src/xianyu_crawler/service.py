@@ -154,9 +154,11 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
         watch_created = 0
         # LLM 二次审核(有 requirement 才审; 无要求/失败放行)。
         # 未通过的也入库(带 rec_ok=False + 理由), 由前端筛选展示。
-        verdicts = review.review_items(fresh, w.requirement, settings)
+        verdicts = review.review_items(fresh, w.requirement, settings, kind=w.kind or "general")
         for item, verdict in zip(fresh, verdicts):
             ok = None if verdict.skipped else verdict.ok
+            if verdict.attrs:
+                item.attrs = verdict.attrs
             # 人工审核没有理由可展示(页面本身就是待审队列); 只保留"没跑通"的提示
             reason = None if verdict.reason == review.REVIEW_MANUAL else (verdict.reason or None)
             if repo.is_collected(session, item.item_id):

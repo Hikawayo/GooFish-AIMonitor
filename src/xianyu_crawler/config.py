@@ -42,6 +42,7 @@ class Watch(BaseModel):
     seller_min_credit: int | None = None
     want_max_per_run: int = 5
     requirement: str | None = None      # 自然语言要求, 供 LLM 二次审核
+    kind: str = "general"               # 模板: general(通用) / ticket(票务) — 只影响抽取与统计口径
     enabled: bool = True
 
 

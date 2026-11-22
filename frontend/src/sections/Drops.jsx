@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { Card, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
+import { Attrs, Card, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
 import { yuan, fmtDate, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
 import ItemSort, { sortItems } from '../components/ItemSort'
@@ -87,6 +87,7 @@ export default function Drops({ refreshKey }) {
                   {it.location && <span>{it.location}</span>}
                   {it.condition && <span>{it.condition}</span>}
                 </div>
+                <Attrs attrs={it.attrs} />
                 <TimeMeta
                   items={[
                     ['上架', ago(it.publish_time)],

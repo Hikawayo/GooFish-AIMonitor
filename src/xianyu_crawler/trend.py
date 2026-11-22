@@ -65,8 +65,26 @@ def _auto_floor(rows) -> tuple[float | None, int]:
     return floor, excluded
 
 
+def is_comparable(attrs: dict | None) -> bool:
+    """能不能进「最低价 / 中位数」的统计。
+
+    捆绑、只收定金尾款、多张一起卖(合计价或数量>1)的挂牌不是单票行情,
+    画线可以, 混进统计会把最低价拉歪。没有属性 = 按通用商品处理。
+    """
+    if not attrs:
+        return True
+    if attrs.get("bundle") or attrs.get("deposit"):
+        return False
+    if int(attrs.get("qty") or 1) > 1:
+        return False
+    if attrs.get("unit") == "合计":
+        return False
+    return True
+
+
 def build(rows, mode: str = "all", tz_minutes: int = 480,
-          min_price: float | None = None) -> dict:
+          min_price: float | None = None,
+          comparable_ids: set[str] | None = None) -> dict:
     """rows: 可迭代的 (item_id, title, observed_at, price), 时间可以是乱序。
 
     商品按「历史最高价 ≥ 下限」筛选, 而不是按单次观测: 一件 ¥1500 的门票
@@ -99,7 +117,7 @@ def build(rows, mode: str = "all", tz_minutes: int = 480,
     points.sort(key=lambda row: row[2])
     if not points:
         return {"mode": mode, "from": None, "to": None, "series": [], "items": [],
-                "observations": 0, "items_total": 0,
+                "observations": 0, "items_total": 0, "comparable_total": 0,
                 "auto_floor": auto_floor, "excluded": excluded}
 
     buckets: dict[datetime, dict[str, float]] = {}
@@ -119,6 +137,7 @@ def build(rows, mode: str = "all", tz_minutes: int = 480,
     pending: dict[str, float] = {}
     series: list[dict] = []
     per_item: dict[str, list[dict]] = {}
+    carried: dict | None = None
     for index, stamp in enumerate(timeline):
         pending.update(buckets[stamp])
         if index not in keep:
@@ -127,9 +146,15 @@ def build(rows, mode: str = "all", tz_minutes: int = 480,
             per_item.setdefault(item_id, []).append({"t": stamp, "price": price})
         last.update(pending)
         pending = {}
-        values = list(last.values())
-        series.append({"t": stamp, "min": min(values),
-                       "median": float(median(values)), "count": len(values)})
+        values = [price for item_id, price in last.items()
+                  if comparable_ids is None or item_id in comparable_ids]
+        if values:
+            carried = {"t": stamp, "min": min(values),
+                       "median": float(median(values)), "count": len(values)}
+        elif carried is not None:         # 这一桶没有可比挂牌 → 沿用上一桶的统计
+            carried = {**carried, "t": stamp}
+        if carried is not None:
+            series.append(carried)
 
     order = sorted(per_item, key=lambda item_id: (-len(per_item[item_id]), item_id))[:MAX_ITEMS]
     items = [{"item_id": item_id, "title": titles.get(item_id, ""),
@@ -137,4 +162,5 @@ def build(rows, mode: str = "all", tz_minutes: int = 480,
     return {"mode": mode, "from": timeline[0], "to": timeline[-1],
             "series": series, "items": items, "observations": len(points),
             "items_total": len(per_item),
+            "comparable_total": (len(comparable_ids) if comparable_ids is not None else len(per_item)),
             "auto_floor": auto_floor, "excluded": excluded}

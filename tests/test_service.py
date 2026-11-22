@@ -37,7 +37,7 @@ def test_scan_recommendations_llm_review(monkeypatch):
     monkeypatch.setattr(service, "_search", lambda ctx, w, st: items)
     monkeypatch.setattr(
         review, "review_items",
-        lambda its, req, st: [review.ReviewVerdict(ok=(it.item_id == "a"), reason="r") for it in its])
+        lambda its, req, st, **_: [review.ReviewVerdict(ok=(it.item_id == "a"), reason="r") for it in its])
     w = Watch(name="w", keywords=["x"], requirement="必须 M5")
     n = service.scan_recommendations(None, s, Settings(), [w])
     assert n.created == 1                           # 头条数字只数"通过"的

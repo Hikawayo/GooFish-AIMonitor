@@ -12,6 +12,7 @@ const blank = () => ({
   city: '',
   conditionText: '',
   requirement: '',
+  kind: 'general',
   free_shipping: false,
   enabled: true,
   public: false,
@@ -43,6 +44,7 @@ export default function Watches() {
       city: form.city.trim() || null,
       condition: form.conditionText.trim() ? splitCsv(form.conditionText) : null,
       requirement: form.requirement.trim() || null,
+      kind: form.kind,
       free_shipping: form.free_shipping || null,
       enabled: form.enabled,
       public: form.public,
@@ -81,6 +83,7 @@ export default function Watches() {
       city: w.city ?? '',
       conditionText: (w.condition || []).join(', '),
       requirement: w.requirement ?? '',
+      kind: w.kind ?? 'general',
       free_shipping: !!w.free_shipping,
       enabled: w.enabled,
       public: w.public,
@@ -96,6 +99,7 @@ export default function Watches() {
       city: w.city,
       condition: w.condition,
       requirement: w.requirement,
+      kind: w.kind,
       free_shipping: w.free_shipping,
       enabled: !w.enabled,
       public: w.public,
@@ -128,6 +132,12 @@ export default function Watches() {
               onChange={(e) => set('keywordsText', e.target.value)}
               placeholder="MacBook Pro M1 Pro 16寸 32G 1T"
             />
+          </Field>
+          <Field label="模板" hint="票务才抽取席种/张数，通用不做额外字段">
+            <select value={form.kind} onChange={(e) => set('kind', e.target.value)}>
+              <option value="general">通用商品</option>
+              <option value="ticket">票务</option>
+            </select>
           </Field>
           <Field label="最低价">
             <input type="number" value={form.price_min} onChange={(e) => set('price_min', e.target.value)} />

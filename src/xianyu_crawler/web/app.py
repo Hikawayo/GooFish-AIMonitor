@@ -157,13 +157,17 @@ def api_price_trend(watch_ids: str = "", mode: str = "all", tz: int = 480,
     if min_price is not None and min_price < 0:
         raise HTTPException(422, "价格下限不能是负数")
 
-    data = trend.build(repo.trend_rows(s, ids), mode=mode, tz_minutes=tz, min_price=min_price)
+    attrs = repo.item_attrs(s, ids)
+    comparable = {item_id for item_id, meta in attrs.items() if trend.is_comparable(meta)}
+    data = trend.build(repo.trend_rows(s, ids), mode=mode, tz_minutes=tz, min_price=min_price,
+                       comparable_ids=comparable if attrs else None)
     return {
         "mode": data["mode"],
         "from": dto._iso(data["from"]),
         "to": dto._iso(data["to"]),
         "observations": data["observations"],
         "items_total": data["items_total"],
+        "stats_excluded": max(0, len(attrs) - len(comparable)),
         "auto_floor": data["auto_floor"],
         "excluded": data["excluded"],
         "series": [{"t": dto._iso(point["t"]), "min": point["min"],
