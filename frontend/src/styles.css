@@ -277,6 +277,11 @@ button { font-family: inherit; }
 .plot-axis { stroke: var(--line2); }
 .plot-line { fill: none; stroke: var(--acc); stroke-width: 2; stroke-linejoin: round; }
 .plot-point { fill: var(--acc); }
+/* 悬停: 竖线 + 标在观测点上的价格气泡 */
+.plot-cursor { stroke: var(--line2); stroke-width: 1; stroke-dasharray: 3 3; }
+.plot-tip rect { fill: var(--s1); stroke: var(--line2); }
+.plot-tip text { fill: var(--dim); font-size: 10px; }
+.plot-tip .plot-tip-price { fill: var(--fg); font-size: 11px; font-weight: 600; }
 .history-rows { margin: 14px 0; font-size: 13px; }
 .history-rows summary { cursor: pointer; color: var(--dim); }
 .history-rows table { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -310,6 +315,11 @@ button { font-family: inherit; }
 .trend-min-line { stroke: var(--acc); stroke-width: 2; }
 .trend-cursor { stroke: var(--line2); stroke-width: 1; }
 .trend-dot { fill: var(--acc); }
+.trend-dot-soft { opacity: .5; }
+/* 悬停气泡: 标在鼠标所在时间桶的低价点上 */
+.trend-tip rect { fill: var(--s1); stroke: var(--line2); }
+.trend-tip text { fill: var(--dim); font-size: 10px; }
+.trend-tip .trend-tip-main { fill: var(--fg); font-size: 10.5px; font-weight: 500; }
 /* 可拖的四条边: 虚线示意可动, 中间的圆角把是抓取点 */
 .trend-handle { stroke: color-mix(in srgb, var(--acc) 45%, transparent); stroke-width: 1.5; stroke-dasharray: 3 3; }
 .trend-grip { fill: var(--acc); opacity: .9; }

@@ -133,9 +133,28 @@ function Chart({ data, width, mode, base, range, onRange, hover, onHover }) {
             <line x1={xIso(hover.t)} x2={xIso(hover.t)} y1={PAD.top}
               y2={HEIGHT - PAD.bottom} className="trend-cursor" />
             <circle cx={xIso(hover.t)} cy={y(hover.min)} r="3.2" className="trend-dot" />
+            <circle cx={xIso(hover.t)} cy={y(hover.median)} r="2.6" className="trend-dot trend-dot-soft" />
           </>
         )}
       </g>
+
+      {/* 价格标在观测点上: 跟着鼠标所在的那个时间桶 */}
+      {hover && (() => {
+        const px = xIso(hover.t)
+        const tipW = 154
+        const tipH = 38
+        const tipX = clamp(px - tipW / 2, PAD.left, width - PAD.right - tipW)
+        const tipY = Math.max(PAD.top, y(hover.min) - tipH - 10)
+        return (
+          <g className="trend-tip" pointerEvents="none">
+            <rect x={tipX} y={tipY} width={tipW} height={tipH} rx="6" />
+            <text x={tipX + 9} y={tipY + 14}>{fmtDateTime(hover.t)}</text>
+            <text x={tipX + 9} y={tipY + 28} className="trend-tip-main">
+              最低 {yuan(hover.min)} · 中位 {yuan(hover.median)}
+            </text>
+          </g>
+        )
+      })()}
 
       {/* 四条可拖的边: 上下调价格范围, 左右调日期范围 */}
       <line x1={PAD.left} x2={width - PAD.right} y1={y(pLow)} y2={y(pLow)} className="trend-handle" />
@@ -232,7 +251,7 @@ export default function PriceTrend({ watches, refreshKey }) {
   const last = shown.length ? shown[shown.length - 1] : null
   const peak = shown.length ? Math.max(...shown.map((point) => point.min)) : null
   const change = peak && last ? Math.round((last.min - peak) / peak * 100) : 0
-  const active = hover ?? last
+  const active = last
 
   return (
     <div className="trend">
