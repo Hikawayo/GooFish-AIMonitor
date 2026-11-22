@@ -380,5 +380,6 @@ if _STATIC_DIR.exists():
     def spa(full_path: str):
         index = _STATIC_DIR / "index.html"
         if index.exists():
-            return FileResponse(index)
+            # 入口 HTML 不许缓存: 否则手机浏览器会一直跑旧 bundle, 刷新也看不到更新
+            return FileResponse(index, headers={"Cache-Control": "no-cache, must-revalidate"})
         raise HTTPException(404)
