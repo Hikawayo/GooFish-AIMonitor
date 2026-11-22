@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 
 from datetime import datetime
 
@@ -63,6 +64,8 @@ def catalog() -> list[dict]:
                     "price": match.price, "observed_at": dto._iso(match.observed_at),
                     "pic_url": item.pic_url, "seller_nick": item.seller_nick,
                     "publish_time": dto._iso(item.publish_time),
+                    # 席种等属性由挂牌文字推出, 公开行情一并展示
+                    "attrs": json.loads(item.attrs) if item.attrs else None,
                 })
     return [dict(folder, items=list(folder["items"].values())) for folder in folders.values()]
 
