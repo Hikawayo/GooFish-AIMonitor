@@ -23,6 +23,19 @@
 - **GitHub**：期间 `github.com:443` 中断过，恢复后已推送；服务器工作副本用 `git bundle` 同步，未直接走 GitHub。
 - **既有能力**：逐条 AI 审核、提示词、搜索和 HTTPS 均已上线。`libatomic1` 构建补丁已进入 `Dockerfile`。
 
+## 2026-11-22 「有人降价了但我这边没更新」= 登录态过期
+
+- **现象**：手动刷新后进度条一两分钟就消失，价格没变，「最后更新」还是几小时前；用户看到别人确实降了价。
+- **定位**（线上探针抓原始响应）：搜索接口返回两条 —— `SUCCESS::调用成功`（但 **无 resultList**）和 **`FAIL_SYS_SESSION_EXPIRED::Session过期`**。即：**闲鱼登录态过期**，页面看着正常、列表永远为空，被代码当成「没人卖」。
+- **修复**：
+  - `search._session_expired()` 从 `ret` 里识别 `SESSION_EXPIRED` / 「过期」→ 抛 `SessionExpired`，不再静默返回 0 条。
+  - 搜索一条响应都没拿到时也抛可读错误（`_no_result_reason`：风控/登录/页面没加载，分类给原因）。
+  - `runner.crawl` 捕获 `SessionExpired` → 结果记为 `login_expired` + 发「登录已过期」邮件（`notify_on_login`）。
+  - 保留 0 条但接口正常的 warning（`ScanResult.warning` → 结果里的 `warn`）。
+  - 前端：失败/可疑统一走常驻提示条；`login_expired` 显示「闲鱼登录已过期…」并把「重试」换成 **「去登录」**（跳 `/settings`）。
+- **验证**：144→145 项 pytest、Pyright 0；线上真跑一轮返回 `{'error': 'login_expired'}`，日志 `闲鱼登录已过期(scope=owner)` —— 说明识别生效。
+- **待用户操作**：到 **设置 → 闲鱼登录** 重新扫码；扫完再跑一轮即恢复正常。
+
 ## 2026-11-22 上下文纪律（不装插件的优化路线）
 
 用户选择「先用足 harness 现有能力、不装第三方插件」。落地三件事：
