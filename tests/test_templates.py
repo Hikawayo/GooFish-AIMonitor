@@ -66,6 +66,50 @@ def test_watch_kind_round_trips_through_api(tmp_path, monkeypatch):
         assert plain.json()["kind"] == "general"
 
 
+def test_ticket_watch_backfills_attrs_for_known_items(monkeypatch):
+    """票务条件会给库里还没属性的商品补抽一次, 每轮限量。"""
+    from xianyu_crawler import service
+    from xianyu_crawler.config import Watch
+    from xianyu_crawler.models import Item
+
+    s = make_session("sqlite:///:memory:", create=True)
+    repo.add_watch(s, name="票", keywords='["x"]', requirement="只多内场", kind="ticket")
+    watch = repo.list_watches(s)[0]
+    repo.create_recommendation(s, Item(item_id="k1", title="内场票", url="u", price=1000), "票", ok=True)
+    repo.save_watch_match(s, watch.id, Item(item_id="k1", title="内场票", url="u", price=1000), True, None)
+
+    monkeypatch.setattr(service, "_search", lambda ctx, w, st: [])
+    monkeypatch.setattr(review, "review_items",
+                        lambda its, req, st, **_: [review.ReviewVerdict(
+                            ok=True, attrs={"seat": "内场", "qty": 1}) for _ in its])
+    from xianyu_crawler.config import Settings
+    settings = Settings(review_enabled=True)
+    result = service.scan_recommendations(None, s, settings,
+                                          [Watch(id=watch.id, name="票", keywords=["x"],
+                                                 requirement="只多内场", kind="ticket")])
+    assert result.backfilled == 1
+    assert repo.item_attrs_of(s, "k1") == {"seat": "内场", "qty": 1}
+
+
+def test_general_watch_does_not_backfill(monkeypatch):
+    from xianyu_crawler import service
+    from xianyu_crawler.config import Settings, Watch
+    from xianyu_crawler.models import Item
+
+    s = make_session("sqlite:///:memory:", create=True)
+    repo.add_watch(s, name="货", keywords='["x"]', requirement="要全新的", kind="general")
+    watch = repo.list_watches(s)[0]
+    repo.create_recommendation(s, Item(item_id="k2", title="相机", url="u", price=1000), "货", ok=True)
+    repo.save_watch_match(s, watch.id, Item(item_id="k2", title="相机", url="u", price=1000), True, None)
+    monkeypatch.setattr(service, "_search", lambda ctx, w, st: [])
+    monkeypatch.setattr(review, "review_items",
+                        lambda its, req, st, **_: [review.ReviewVerdict(
+                            ok=True, attrs={"seat": "内场"}) for _ in its])
+    service.scan_recommendations(None, s, Settings(review_enabled=True),
+                                 [Watch(id=watch.id, name="货", keywords=["x"], requirement="要全新的")])
+    assert repo.item_attrs_of(s, "k2") is None      # 通用条件不抽票务字段
+
+
 def test_attrs_persist_on_item():
     from xianyu_crawler.models import Item
     from xianyu_crawler.storage.orm import ItemRow

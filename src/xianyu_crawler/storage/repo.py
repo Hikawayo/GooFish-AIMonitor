@@ -148,6 +148,23 @@ def price_history(s: Session, item_id: str):
                                         .limit(500)))))
 
 
+def set_item_attrs(s: Session, item_id: str, attrs: dict) -> None:
+    """只补属性, 不动价格与状态(用于给历史商品补抽席种等)。"""
+    row = s.get(ItemRow, item_id)
+    if row is None:
+        return
+    row.attrs = json.dumps(attrs, ensure_ascii=False)
+    s.commit()
+
+
+def item_attrs_of(s: Session, item_id: str) -> dict | None:
+    raw = s.scalar(select(ItemRow.attrs).where(ItemRow.item_id == item_id))
+    try:
+        return json.loads(raw) if raw else None
+    except ValueError:
+        return None
+
+
 def item_attrs(s: Session, watch_ids: list[int]) -> dict[str, dict | None]:
     """这些条件下各商品抽取到的属性(没抽到 → None), 用来判断能不能进价格统计。"""
     if not watch_ids:

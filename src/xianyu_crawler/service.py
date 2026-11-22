@@ -112,6 +112,7 @@ class ScanResult:
     created: int = 0
     scanned: int = 0
     raw: int = 0
+    backfilled: int = 0      # 票务模板给历史商品补抽属性成功的条数
 
 
 def scan_recommendations(ctx, session: Session, settings: Settings,
@@ -182,7 +183,39 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
         result.created += watch_created
         logger.info("扫描「%s」关键词=%s: 搜索 %d 条 → 命中规则 %d 条 → 新增 %d 条",
                     w.name, " ".join(w.keywords), watch_raw, watch_scanned, watch_created)
+        if (w.kind or "general") == "ticket":
+            result.backfilled += _backfill_attrs(session, settings, w)
     return result
+
+
+# 票务模板: 一轮最多给几件历史商品补抽属性(控制模型调用量)
+ATTR_BACKFILL_PER_RUN = 10
+
+
+def _backfill_attrs(session: Session, settings: Settings, w: Watch) -> int:
+    """给库里还没属性的商品补抽席种等; 每轮限量, 抽到就存, 抽不到下次再说。"""
+    if not settings.review_enabled or not w.requirement or w.id is None:
+        return 0
+    pending = []
+    for match in repo.watch_matches(session, w.id):
+        if match.ok is False:
+            continue
+        attrs = repo.item_attrs_of(session, match.item_id)
+        if attrs:
+            continue
+        pending.append(Item(item_id=match.item_id, title=match.title or "", url=match.url or "",
+                            price=match.price or 0.0))
+        if len(pending) >= ATTR_BACKFILL_PER_RUN:
+            break
+    if not pending:
+        return 0
+    done = 0
+    for item, verdict in zip(pending, review.review_items(pending, w.requirement, settings,
+                                                          kind="ticket")):
+        if verdict.attrs and not verdict.skipped:
+            repo.set_item_attrs(session, item.item_id, verdict.attrs)
+            done += 1
+    return done
 
 
 def rereview_pending(session: Session, settings: Settings) -> dict:
