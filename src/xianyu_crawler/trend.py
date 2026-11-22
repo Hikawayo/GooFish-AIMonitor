@@ -18,6 +18,8 @@ MODES = ("all", "day", "week", "month")
 MAX_SERIES_POINTS = 240
 # 商品太多时只画观测最多的若干条, 否则线会糊成一团
 MAX_ITEMS = 60
+# 判断「主要价位」时, 两档价格差多少倍才算两个市场(¥20 的兑换码 vs ¥1300 的门票)
+AUTO_SPLIT_RATIO = 6.0
 
 
 def _bucket_time(moment: datetime, mode: str, tz: timedelta) -> datetime:
@@ -35,25 +37,70 @@ def _bucket_time(moment: datetime, mode: str, tz: timedelta) -> datetime:
     return local - tz
 
 
+def _auto_floor(rows) -> tuple[float | None, int]:
+    """价格分两簇时给出一个分界: 取最大的「相邻价倍数跳变」。
+
+    一个条件里常同时挂着 ¥2 的兑换码和 ¥1500 的门票。不区分的话纵轴会被
+    ¥1 撑到 ¥3400, 门票怎么降都挤在底部一条线里。没有明显跳变就不过滤。
+    """
+    latest: dict[str, float] = {}
+    peak: dict[str, float] = {}
+    for item_id, _, _, price in rows:
+        if item_id is None or price is None:
+            continue
+        latest[str(item_id)] = float(price)
+        peak[str(item_id)] = max(peak.get(str(item_id), 0.0), float(price))
+    prices = sorted(value for value in latest.values() if value > 0)
+    if len(prices) < 4:
+        return None, 0
+    best_ratio, best_index = 1.0, -1
+    for index in range(len(prices) - 1):
+        ratio = prices[index + 1] / max(prices[index], 0.01)
+        if ratio > best_ratio:
+            best_ratio, best_index = ratio, index
+    if best_index < 0 or best_ratio < AUTO_SPLIT_RATIO:
+        return None, 0
+    floor = (prices[best_index] * prices[best_index + 1]) ** 0.5
+    excluded = sum(1 for value in peak.values() if value < floor)
+    return floor, excluded
+
+
 def build(rows, mode: str = "all", tz_minutes: int = 480,
           min_price: float | None = None) -> dict:
     """rows: 可迭代的 (item_id, title, observed_at, price), 时间可以是乱序。
 
-    min_price 用来把兑换码/特典这类低价商品挡在外面: 一个条件里常常混着
-    ¥2 的贴纸和 ¥1500 的门票, 不过滤的话「最低价」永远贴着地。
+    商品按「历史最高价 ≥ 下限」筛选, 而不是按单次观测: 一件 ¥1500 的门票
+    降到 ¥400 时仍然留在图里(能看到这次跳水), 只有从来没进过这个价位的
+    兑换码才会被挡掉。min_price 不传时按 _auto_floor 自动判断。
     """
     if mode not in MODES:
         raise ValueError(f"mode 只能是 {MODES}")
     tz = timedelta(minutes=tz_minutes)
 
+    rows = list(rows)
+    auto_floor, excluded = (None, 0)
+    floor = min_price
+    if floor is None:
+        auto_floor, excluded = _auto_floor(rows)
+        floor = auto_floor
+
+    if floor:
+        peak: dict[str, float] = {}
+        for item_id, _, _, price in rows:
+            if item_id is not None and price is not None:
+                peak[str(item_id)] = max(peak.get(str(item_id), 0.0), float(price))
+        keep_ids = {item_id for item_id, top in peak.items() if top >= floor}
+        rows = [row for row in rows if str(row[0]) in keep_ids]
+        excluded = sum(1 for item_id in peak if item_id not in keep_ids)
+
     points = [(str(item_id), title or "", moment, float(price))
               for item_id, title, moment, price in rows
-              if item_id and moment is not None and price is not None
-              and (min_price is None or float(price) >= min_price)]
+              if item_id and moment is not None and price is not None]
     points.sort(key=lambda row: row[2])
     if not points:
         return {"mode": mode, "from": None, "to": None, "series": [], "items": [],
-                "observations": 0, "items_total": 0}
+                "observations": 0, "items_total": 0,
+                "auto_floor": auto_floor, "excluded": excluded}
 
     buckets: dict[datetime, dict[str, float]] = {}
     titles: dict[str, str] = {}
@@ -89,4 +136,5 @@ def build(rows, mode: str = "all", tz_minutes: int = 480,
               "points": per_item[item_id]} for item_id in order]
     return {"mode": mode, "from": timeline[0], "to": timeline[-1],
             "series": series, "items": items, "observations": len(points),
-            "items_total": len(per_item)}
+            "items_total": len(per_item),
+            "auto_floor": auto_floor, "excluded": excluded}

@@ -75,6 +75,35 @@ def test_min_price_keeps_junk_listings_out():
     assert data["series"][0]["min"] == 1500 and data["observations"] == 1
 
 
+def test_auto_floor_splits_junk_from_main_market():
+    """¥2 的兑换码 + ¥1500 的门票混在一个条件里时, 自动只保留门票这一档。"""
+    rows = []
+    for index in range(4):
+        rows.append(obs(f"code-{index}", datetime(2026, 11, 20, 1, index), 2 + index))
+    rows += [
+        obs("ticket-a", datetime(2026, 11, 20, 2, 0), 1500),
+        obs("ticket-a", datetime(2026, 11, 21, 2, 0), 1300),
+        obs("ticket-b", datetime(2026, 11, 20, 2, 0), 1600),
+    ]
+    data = trend.build(rows, mode="day", tz_minutes=480)
+    assert data["excluded"] == 4
+    assert data["auto_floor"] and 3 < data["auto_floor"] < 1500
+    assert {item["item_id"] for item in data["items"]} == {"ticket-a", "ticket-b"}
+    assert data["series"][-1]["min"] == 1300
+
+
+def test_item_stays_visible_after_dropping_below_floor():
+    """门票从 ¥1500 砸到 ¥400 时仍要留在图里, 不能因为跌破下限就消失。"""
+    rows = [
+        obs("code", datetime(2026, 11, 20, 1, 0), 3),
+        obs("ticket", datetime(2026, 11, 20, 2, 0), 1500),
+        obs("ticket", datetime(2026, 11, 21, 2, 0), 400),
+    ]
+    data = trend.build(rows, mode="day", tz_minutes=480, min_price=800)
+    assert [item["item_id"] for item in data["items"]] == ["ticket"]
+    assert [point["price"] for point in data["items"][0]["points"]] == [1500, 400]
+
+
 def test_empty_input():
     data = trend.build([], mode="day")
     assert data["series"] == [] and data["items"] == [] and data["from"] is None

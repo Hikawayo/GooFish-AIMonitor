@@ -153,7 +153,8 @@ export default function PriceTrend({ watches, refreshKey }) {
 
   const series = data?.series ?? []
   const latest = series[series.length - 1]
-  const lowest = series.length ? Math.min(...series.map((point) => point.min)) : null
+  const peak = series.length ? Math.max(...series.map((point) => point.min)) : null
+  const change = peak && latest ? Math.round((latest.min - peak) / peak * 100) : 0
   const active = hover == null ? latest : series[hover]
 
   return (
@@ -193,15 +194,21 @@ export default function PriceTrend({ watches, refreshKey }) {
                   </>
                   : null}
                 <span className="trend-sum">
-                  区间最低 {yuan(lowest)} · 共 {data.items_total} 件
-                  {data.items.length < data.items_total ? `（画了 ${data.items.length} 条）` : ''}
-                  {' · '}{data.observations} 次观测
+                  最高 {yuan(peak)} → 现 {yuan(latest.min)}
+                  {change === 0 ? '（持平）' : `（${change > 0 ? '+' : '−'}${Math.abs(change)}%）`}
+                  {' · '}{data.items_total} 件
                 </span>
               </div>
               <div ref={box}>
                 <Chart data={data} width={width} mode={mode} onHover={setHover}
                   hover={hover} />
               </div>
+              {data.excluded > 0 && (
+                <p className="trend-note">
+                  已忽略 {data.excluded} 件 ¥{Math.round(data.auto_floor ?? 0)} 以下的商品（兑换码、特典之类），
+                  可在「¥ 以上」里改
+                </p>
+              )}
               <div className="trend-legend">
                 <span><i className="trend-key-min" />最低价</span>
                 <span><i className="trend-key-median" />中位数</span>

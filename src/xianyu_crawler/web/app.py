@@ -164,6 +164,8 @@ def api_price_trend(watch_ids: str = "", mode: str = "all", tz: int = 480,
         "to": dto._iso(data["to"]),
         "observations": data["observations"],
         "items_total": data["items_total"],
+        "auto_floor": data["auto_floor"],
+        "excluded": data["excluded"],
         "series": [{"t": dto._iso(point["t"]), "min": point["min"],
                     "median": point["median"], "count": point["count"]}
                    for point in data["series"]],
