@@ -17,6 +17,9 @@ from ..models import Item
 from ..storage import repo
 from ..storage.orm import ItemRow, WatchFolder, WatchMatch
 
+# 商品排序: 前端下拉的取值, 也是本人默认排序的合法范围
+SORTS = {"published-desc", "published-asc", "price-asc", "price-desc"}
+
 app = FastAPI(title="海鲜价格监控")
 
 
@@ -193,6 +196,8 @@ def api_get_config(s: Session = Depends(get_db)):
 def api_put_config(body: dto.ConfigIn, s: Session = Depends(get_db)):
     fields = {k: v for k, v in body.model_dump().items() if v is not None}
     member = runtime.scope() != runtime.OWNER
+    if "default_sort" in fields and fields["default_sort"] not in SORTS:
+        raise HTTPException(422, "排序方式无效")
     if member:
         for field in ("smtp_host", "smtp_port", "smtp_user", "smtp_pass", "notify_to",
                       "search_url", "favorites_url", "headless"):

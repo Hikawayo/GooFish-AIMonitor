@@ -131,6 +131,7 @@ class AppConfig(Base):
     min_drop_abs: Mapped[float] = mapped_column(Float, default=50.0)
     notify_to: Mapped[str] = mapped_column(String, default="")  # 空=回退本地 XIANYU_NOTIFY_TO
     headless: Mapped[bool] = mapped_column(Boolean, default=True)
+    default_sort: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # 本人默认排序
     search_max_pages: Mapped[int] = mapped_column(Integer, default=3)
     favorites_max_pages: Mapped[int] = mapped_column(Integer, default=5)
     # LLM 二次审核(控制台可改; token 只写不回传, 留空回退环境变量)

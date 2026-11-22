@@ -346,7 +346,7 @@ export default function App() {
             path="/recommendations"
             element={<Recommendations refreshKey={refreshKey} onToast={showToast} />}
           />
-          <Route path="/favorites" element={<Drops refreshKey={refreshKey} />} />
+          <Route path="/favorites" element={<Drops refreshKey={refreshKey} onToast={showToast} />} />
           <Route path="/watches" element={<Watches />} />
           <Route path="/settings" element={<Settings status={status} />} />
           <Route path="*" element={<Navigate to="/recommendations" replace />} />

@@ -225,9 +225,9 @@ button { font-family: inherit; }
 .folder-split:hover i, .folder-split[data-drag='1'] i { opacity: 1; }
 .folder-split:hover, .folder-split[data-drag='1'] { color: var(--acc); background: var(--s2); }
 /* 收起后只剩一个贴在右边缘的小按钮, 点它展开 */
-.folder-layout[data-collapsed='1'] { grid-template-columns: minmax(0, 1fr) 26px 0; }
+.folder-layout[data-collapsed='1'] { grid-template-columns: minmax(0, 1fr) 44px 0; }
 .folder-layout[data-collapsed='1'] .folder-split {
-  min-height: 0; height: 32px; margin-top: 2px; cursor: pointer;
+  min-height: 0; height: 32px; width: 26px; justify-self: end; margin-top: 2px; cursor: pointer;
   background: var(--s2); color: var(--dim);
   border: 1px solid var(--line); border-radius: 6px;
 }
@@ -236,7 +236,39 @@ button { font-family: inherit; }
 .folder-layout[data-collapsed='1'] .folder-nav { display: none; }
 .folder-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .folder-heading h2 { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
-.item-sort { background: var(--s1); color: var(--fg); border: 1px solid var(--line); border-radius: var(--rad); font: inherit; font-size: 12px; padding: 6px 9px; max-width: 100%; }
+/* 排序下拉: 只定尺寸, 外观交给站内统一的下拉样式 */
+.item-sort { min-width: 150px; }
+
+/* 站内统一下拉框(替代原生 select 的弹层) */
+.select { position: relative; display: inline-flex; min-width: 0; }
+.select-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; min-width: 0;
+  background: var(--s1); color: var(--fg); border: 1px solid var(--line);
+  border-radius: var(--rad); font: inherit; font-size: 12px; padding: 7px 9px;
+  cursor: pointer; text-align: left;
+}
+.select-btn:hover { border-color: var(--line2); }
+.select-btn .select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-btn i { flex: none; color: var(--dim); font-size: 13px; }
+.select-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 40;
+  min-width: 100%; max-height: 264px; overflow-y: auto;
+  background: var(--s1); border: 1px solid var(--line); border-radius: var(--rad);
+  box-shadow: 0 10px 28px rgba(10, 30, 40, .14); padding: 4px;
+}
+.select-right .select-menu { left: auto; right: 0; }
+.select-menu button {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; border: none; background: none; color: var(--fg); font: inherit;
+  font-size: 12.5px; padding: 7px 8px; border-radius: calc(var(--rad) - 2px);
+  cursor: pointer; text-align: left; white-space: nowrap;
+}
+.select-menu button:hover { background: var(--soft); }
+.select-menu button.on { color: var(--acc); }
+.select-menu button i { font-size: 13px; }
+/* 表单里的下拉要跟输入框一样占满一行 */
+.form-grid .select, .form-row .select { display: flex; width: 100%; }
 .folder-filters, .folder-list { display: flex; gap: 4px; }
 .folder-list { flex-direction: column; }
 .folder-nav button {

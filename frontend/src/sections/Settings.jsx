@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import Select from '../components/Select'
 import { Card, Button, Spinner, Toggle, Field, ConfirmDialog } from '../components/ui'
 
 export default function Settings({ status }) {
@@ -275,9 +276,8 @@ export default function Settings({ status }) {
         <div className="form-grid">
           <Field label="接口地址" hint="OpenAI 兼容地址，留空读取服务器配置">
             {access?.member ? (
-              <select value={cfg.review_base_url || ''} onChange={(e) => set('review_base_url', e.target.value)}>
-                {access.review_urls.map((url) => <option key={url} value={url}>{url}</option>)}
-              </select>
+              <Select value={cfg.review_base_url || ''} onChange={(value) => set('review_base_url', value)}
+                options={access.review_urls.map((url) => ({ value: url, label: url }))} />
             ) : <input
               value={cfg.review_base_url || ''}
               onChange={(e) => set('review_base_url', e.target.value)}

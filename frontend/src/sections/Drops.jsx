@@ -4,22 +4,42 @@ import FolderLayout from '../components/FolderLayout'
 import { Attrs, Card, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
 import { yuan, fmtDate, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
-import ItemSort, { sortItems } from '../components/ItemSort'
+import ItemSort, { DEFAULT_SORT, sortItems } from '../components/ItemSort'
 import PriceHistory from '../components/PriceHistory'
 import PriceTrend from '../components/PriceTrend'
 
-export default function Drops({ refreshKey }) {
+export default function Drops({ refreshKey, onToast }) {
   const [items, setItems] = useState(null)
   const [visibility, setVisibility] = useState('mine')
   const [folderId, setFolderId] = useState('')
-  const [sortOrder, setSortOrder] = useState('published-desc')
+  const [sortOrder, setSortOrder] = useState(DEFAULT_SORT)
+  const sortTouched = useRef(false)
+  const [cfg, setCfg] = useState(null)
   const [loadError, setLoadError] = useState('')
   const { watches, folders, shared, error } = useFolders(refreshKey, visibility)
 
   const load = () => api.favorites().then(setItems).catch((error) => setLoadError(error.message))
 
+  // 本账号默认排序: 加载配置时套用, 用户手动选过就不再覆盖
+  useEffect(() => {
+    if (!sortTouched.current && cfg?.default_sort) setSortOrder(cfg.default_sort)
+  }, [cfg])
+  const changeSort = (value) => {
+    sortTouched.current = true
+    setSortOrder(value)
+  }
+  const makeSortDefault = async (value) => {
+    try {
+      await api.saveConfig({ default_sort: value })
+      onToast?.('已设为默认排序')
+    } catch (error) {
+      onToast?.(error.message)
+    }
+  }
+
   useEffect(() => {
     load()
+    api.config().then(setCfg).catch(() => {})
   }, [refreshKey])
 
   if (items === null) return loadError ? <p role="alert">{loadError}</p> : <Spinner />
@@ -55,7 +75,7 @@ export default function Drops({ refreshKey }) {
         <div className="folder-results">
       {selected && <div className="folder-heading">
         <h2>{selected.name}</h2>
-        <ItemSort value={sortOrder} onChange={setSortOrder} />
+        <ItemSort value={sortOrder} onChange={changeSort} onMakeDefault={makeSortDefault} />
       </div>}
       {selected?.watches?.length > 0 && (
         <PriceTrend watches={selected.watches} refreshKey={refreshKey} />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import Select from '../components/Select'
 import { Card, Button, Badge, Spinner, EmptyState, Toggle, Field } from '../components/ui'
 import { splitCsv } from '../util'
 
@@ -134,10 +135,8 @@ export default function Watches() {
             />
           </Field>
           <Field label="模板" hint="票务才抽取席种/张数，通用不做额外字段">
-            <select value={form.kind} onChange={(e) => set('kind', e.target.value)}>
-              <option value="general">通用商品</option>
-              <option value="ticket">票务</option>
-            </select>
+            <Select value={form.kind} onChange={(value) => set('kind', value)}
+              options={[{ value: 'general', label: '通用商品' }, { value: 'ticket', label: '票务' }]} />
           </Field>
           <Field label="最低价">
             <input type="number" value={form.price_min} onChange={(e) => set('price_min', e.target.value)} />
@@ -149,16 +148,14 @@ export default function Watches() {
             <input value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="上海" />
           </Field>
           <Field label="文件夹">
-            <select value={form.folderId} onChange={(e) => set('folderId', e.target.value)}>
-              <option value="">使用条件名称</option>
-              {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
-            </select>
+            <Select value={form.folderId} onChange={(value) => set('folderId', value)}
+              options={[{ value: '', label: '使用条件名称' },
+                ...folders.map((folder) => ({ value: String(folder.id), label: folder.name }))]} />
           </Field>
           <Field label="可见性">
-            <select value={form.public ? 'public' : 'private'} onChange={(e) => set('public', e.target.value === 'public')}>
-              <option value="private">私密 · 仅自己</option>
-              <option value="public">公开 · 本站登录用户</option>
-            </select>
+            <Select value={form.public ? 'public' : 'private'} onChange={(value) => set('public', value === 'public')}
+              options={[{ value: 'private', label: '私密 · 仅自己' },
+                { value: 'public', label: '公开 · 本站登录用户' }]} />
           </Field>
           <Field label="成色（用逗号分隔）">
             <input

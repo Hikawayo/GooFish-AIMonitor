@@ -4,7 +4,7 @@ import FolderLayout from '../components/FolderLayout'
 import { Attrs, Card, Button, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
 import { yuan, fmtDate, fmtDateTime, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
-import ItemSort, { sortItems } from '../components/ItemSort'
+import ItemSort, { DEFAULT_SORT, sortItems } from '../components/ItemSort'
 import PriceHistory from '../components/PriceHistory'
 import PriceTrend from '../components/PriceTrend'
 
@@ -19,7 +19,8 @@ export default function Recommendations({ refreshKey, onToast }) {
   const [cfg, setCfg] = useState(null)               // 人工审核模式(关闭 AI 审核)没有 AI 筛选项
   const [visibility, setVisibility] = useState('mine')
   const [folderId, setFolderId] = useState('')
-  const [sortOrder, setSortOrder] = useState('published-desc')
+  const [sortOrder, setSortOrder] = useState(DEFAULT_SORT)
+  const sortTouched = useRef(false)
   const [savedShared, setSavedShared] = useState({})
   const { watches, folders, shared, error } = useFolders(refreshKey, visibility)
 
@@ -32,6 +33,23 @@ export default function Recommendations({ refreshKey, onToast }) {
   }, [watches.length, shared.length])
 
   const load = () => api.recommendations('new').then(setItems)
+
+  // 本账号默认排序: 加载配置时套用, 用户手动选过就不再覆盖
+  useEffect(() => {
+    if (!sortTouched.current && cfg?.default_sort) setSortOrder(cfg.default_sort)
+  }, [cfg])
+  const changeSort = (value) => {
+    sortTouched.current = true
+    setSortOrder(value)
+  }
+  const makeSortDefault = async (value) => {
+    try {
+      await api.saveConfig({ default_sort: value })
+      onToast?.('已设为默认排序')
+    } catch (error) {
+      onToast?.(error.message)
+    }
+  }
   useEffect(() => {
     load().catch((error) => onToast?.(error.message))
   }, [refreshKey])
@@ -212,7 +230,7 @@ export default function Recommendations({ refreshKey, onToast }) {
         <div className="folder-results">
       {selected && <div className="folder-heading">
         <h2>{selected.name}</h2>
-        <ItemSort value={sortOrder} onChange={setSortOrder} />
+        <ItemSort value={sortOrder} onChange={changeSort} onMakeDefault={makeSortDefault} />
       </div>}
       {!isPublic && selected?.watches?.length > 0 && (
         <PriceTrend watches={selected.watches} refreshKey={refreshKey} />

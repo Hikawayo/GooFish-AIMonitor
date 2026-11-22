@@ -43,6 +43,7 @@ class ConfigIn(BaseModel):
     min_drop_abs: float | None = None
     notify_to: str | None = None
     headless: bool | None = None
+    default_sort: str | None = None
     search_max_pages: int | None = None
     favorites_max_pages: int | None = None
     # LLM 二次审核
@@ -81,6 +82,7 @@ class ConfigOut(BaseModel):
     min_drop_abs: float
     notify_to: str
     headless: bool
+    default_sort: str
     search_max_pages: int
     favorites_max_pages: int
     # LLM 二次审核(token 不回传明文, 只给 set 标记)
@@ -222,6 +224,7 @@ def config_to_out(c: AppConfig, *, member: bool = False) -> ConfigOut:
         min_drop_abs=c.min_drop_abs,
         notify_to=c.notify_to,
         headless=c.headless,
+        default_sort=c.default_sort or "price-desc",
         search_max_pages=c.search_max_pages,
         favorites_max_pages=c.favorites_max_pages,
         review_enabled=c.review_enabled,
