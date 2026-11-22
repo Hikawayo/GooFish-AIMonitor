@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import FolderLayout from '../components/FolderLayout'
 import { Attrs, Card, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
