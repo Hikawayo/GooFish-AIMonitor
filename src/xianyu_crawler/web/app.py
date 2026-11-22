@@ -383,6 +383,7 @@ def api_status(s: Session = Depends(get_db)):
     cfg = repo.get_config(s)
     return {
         "running": runtime.job_state()["running"],
+        "progress": runtime.job_state().get("progress"),
         "last": runtime.job_state()["last"],
         "paused": cfg.paused,
         "schedule_minutes": cfg.schedule_minutes,

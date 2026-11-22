@@ -84,11 +84,14 @@ def crawl(watch_name: str | None = None) -> dict:
         watches = [service.watchrow_to_watch(w) for w in repo.list_watches(s)]
         if watch_name:                           # 只跑指定条件
             watches = [w for w in watches if w.name == watch_name]
+        total = 2 + len(watches)
+        runtime.set_progress("打开闲鱼", 0, total)
         with browser_session(settings) as ctx:
             check = ctx.new_page()
             navs: list = []          # 顺带抓「我的导航」接口里的头像(在 handler 外再读 body)
             check.on("response",
                      lambda r: navs.append(r) if "mtop.idle.web.user.page.nav" in r.url else None)
+            runtime.set_progress("检查登录状态", 1, total)
             logged_in = is_logged_in(check)
             if logged_in and not navs:
                 try:
@@ -113,16 +116,32 @@ def crawl(watch_name: str | None = None) -> dict:
                 result = {"error": "login_expired", "at": _now_iso()}
             elif watch_name:
                 # 只跑单个条件: 仅搜索该条件 + 通知(不刷收藏、不核活, 快)
-                scan = service.scan_recommendations(ctx, s, settings, watches)
+                runtime.set_progress("搜索条件", 2, total)
+                scan = service.scan_recommendations(
+                    ctx, s, settings, watches,
+                    on_watch=lambda i, n, name: runtime.set_progress(
+                        f"搜索「{name}」", min(total - 1, 2 + i), total))
                 notified = _notify(s, settings)
                 result = {"recommendations": scan.created, "scanned": scan.scanned, "raw": scan.raw,
                           "scope": watch_name, "notified": notified, "at": _now_iso()}
             else:
                 # 先跑监控(刷新收藏列表入库, 含收藏夹死链), scan 才能据此过滤
+                runtime.set_progress("刷新闲鱼收藏", 2, total)
                 drops = service.run_price_monitor(ctx, s, settings)
-                scan = service.scan_recommendations(ctx, s, settings, watches)
+                base = 2 + len(watches)
+                runtime.set_progress("搜索条件", 2, base)
+                scan = service.scan_recommendations(
+                    ctx, s, settings, watches,
+                    on_watch=lambda i, n, name: runtime.set_progress(
+                        f"搜索「{name}」", min(base, 2 + i), base),
+                    on_backfill=lambda i, n: runtime.set_progress(
+                        f"补抽属性 {i}/{n}", base + i, base + n))
                 # 给待审推荐核活, 标记卖出/删除的死链(避免重复打开)
-                dead = service.sweep_liveness(ctx, s, settings)
+                runtime.set_progress("核活待审商品", base, base)
+                dead = service.sweep_liveness(
+                    ctx, s, settings,
+                    on_step=lambda i, n: runtime.set_progress(
+                        f"核活 {i}/{n}", base + i, base + n))
                 notified = _notify(s, settings)
                 result = {"recommendations": scan.created, "scanned": scan.scanned, "raw": scan.raw,
                           "drops": drops + scan.drops, "dead": dead, "notified": notified,
@@ -134,6 +153,7 @@ def crawl(watch_name: str | None = None) -> dict:
         if s is not None:
             s.close()
         runtime.job_state()["running"] = False
+        runtime.clear_progress()
         _LOCK.release()
     runtime.job_state()["last"] = result
     return result

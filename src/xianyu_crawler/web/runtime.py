@@ -118,6 +118,16 @@ def job_state() -> dict:
     return _jobs.setdefault(scope(), {"running": False, "last": None})
 
 
+def set_progress(step: str, done: int, total: int) -> None:
+    """记录当前步骤与进度; total<=0 时只显示步骤不显示百分比。"""
+    state = job_state()
+    state["progress"] = {"step": step, "done": int(done), "total": int(total)}
+
+
+def clear_progress() -> None:
+    job_state().pop("progress", None)
+
+
 def login_state() -> dict:
     return _logins.setdefault(scope(), {"status": "idle", "qr": None, "message": "", "at": None})
 

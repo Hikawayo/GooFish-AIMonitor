@@ -183,6 +183,10 @@ button { font-family: inherit; }
    主区
    ============================================================ */
 .main { min-width: 0; overflow-y: auto; padding: 20px 24px 36px; }
+/* 抓取进度条: 细线贴在内容区顶部, 百分比同时显示在顶栏 */
+.run-progress { height: 3px; border-radius: 3px; background: var(--soft); overflow: hidden; margin: -8px 0 16px; }
+.run-progress span { display: block; height: 100%; background: var(--acc); border-radius: 3px; transition: width .4s ease; }
+.live.on { color: var(--acc); font-weight: 500; }
 /* 上一轮抓取失败: 常驻提示, 不靠一闪而过的 toast */
 .run-alert {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;

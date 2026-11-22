@@ -118,16 +118,19 @@ class ScanResult:
 
 
 def scan_recommendations(ctx, session: Session, settings: Settings,
-                         watches: list[Watch]) -> ScanResult:
+                         watches: list[Watch], on_watch=None,
+                         on_backfill=None) -> ScanResult:
     """搜索 → 规则过滤 → 去重 → LLM 二次审核 → 写"我没见过的"推荐。
 
     `created` 只数真正新入队的候选；`scanned` 是本轮搜索命中规则的条数——
     有了它才能区分「一条都没搜到」和「都搜到了但都不是新的」。
     """
     result = ScanResult()
-    for w in watches:
+    for watch_index, w in enumerate(watches):
         if not w.enabled:
             continue
+        if on_watch is not None:
+            on_watch(watch_index, len(watches), w.name)
         # 规则过滤 + 去重(本轮内 & 已推荐过的)
         fresh: list[Item] = []
         seen: set[str] = set()
@@ -200,7 +203,7 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
         logger.info("扫描「%s」关键词=%s: 搜索 %d 条 → 命中规则 %d 条 → 新增 %d 条",
                     w.name, " ".join(w.keywords), watch_raw, watch_scanned, watch_created)
         if (w.kind or "general") == "ticket":
-            result.backfilled += _backfill_attrs(session, settings, w)
+            result.backfilled += _backfill_attrs(session, settings, w, on_step=on_backfill)
     return result
 
 
@@ -208,7 +211,7 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
 ATTR_BACKFILL_PER_RUN = 10
 
 
-def _backfill_attrs(session: Session, settings: Settings, w: Watch) -> int:
+def _backfill_attrs(session: Session, settings: Settings, w: Watch, on_step=None) -> int:
     """给库里还没属性的商品补抽席种等; 每轮限量, 抽到就存, 抽不到下次再说。"""
     if not settings.review_enabled or not w.requirement or w.id is None:
         return 0
@@ -227,7 +230,7 @@ def _backfill_attrs(session: Session, settings: Settings, w: Watch) -> int:
         return 0
     done = 0
     for item, verdict in zip(pending, review.review_items(pending, w.requirement, settings,
-                                                          kind="ticket")):
+                                                          kind="ticket", on_item=on_step)):
         if verdict.attrs and not verdict.skipped:
             repo.set_item_attrs(session, item.item_id, verdict.attrs)
             done += 1
@@ -289,7 +292,7 @@ def rereview_pending(session: Session, settings: Settings) -> dict:
             "not_run": not_run, "skipped_no_requirement": skipped}
 
 
-def sweep_liveness(ctx, session: Session, settings: Settings) -> int:
+def sweep_liveness(ctx, session: Session, settings: Settings, on_step=None) -> int:
     """对待审推荐逐条打开详情页核活, 已删除/下架的标死链(置灰, 不再误开)。
 
     收藏夹的死链由收藏 API 直接给出(run_monitor 入库); 这里专补"纯搜索来源、
@@ -298,7 +301,9 @@ def sweep_liveness(ctx, session: Session, settings: Settings) -> int:
     rows = repo.list_recommendations(session, "new")
     pending = [r for r in rows if not r.dead][: settings.liveness_max_checks]
     newly_dead = 0
-    for r in pending:
+    for index, r in enumerate(pending, 1):
+        if on_step is not None:
+            on_step(index, len(pending))
         dead, reason, stats = _check_liveness(ctx, r.item_id)
         if stats:                          # 顺带回写浏览/收藏/想要次数
             repo.update_item_stats(session, r.item_id, **stats)

@@ -204,6 +204,18 @@ export default function App() {
   }
 
   const running = status?.running
+  const progress = status?.progress
+  const percent = progress && progress.total > 0
+    ? Math.min(100, Math.round((progress.done / progress.total) * 100))
+    : null
+  const step = progress?.step || ''
+
+  // 标签页也显示进度: 切到别的页面也能看出还在跑
+  useEffect(() => {
+    document.title = running && percent !== null
+      ? `${percent}% 抓取中 · 海鲜价格监控`
+      : '海鲜价格监控'
+  }, [running, percent])
   const metrics = [
     { k: '今日降价', i: 'ti-trending-down', v: stats.drops_today },
     { k: '已失效', i: 'ti-circle-x', v: stats.dead },
@@ -224,8 +236,10 @@ export default function App() {
           海鲜价格监控
         </div>
         <div className="grow" />
-        <div className="live" role="status">
-          {running ? '抓取中…' : login.has_state ? '' : '未登录'}
+        <div className={'live' + (running ? ' on' : '')} role="status">
+          {running
+            ? (percent === null ? '抓取中…' : `抓取中 ${percent}%${step ? ` · ${step}` : ''}`)
+            : login.has_state ? '' : '未登录'}
         </div>
         <div className="skins">
           <button
@@ -337,6 +351,12 @@ export default function App() {
 
       {/* 主区 */}
       <div className="main">
+        {running && percent !== null && (
+          <div className="run-progress" role="progressbar" aria-valuenow={percent}
+            aria-valuemin={0} aria-valuemax={100} aria-label={`抓取进度 ${percent}%`}>
+            <span style={{ width: `${percent}%` }} />
+          </div>
+        )}
         {!running && status?.last?.error && dismissedError !== status.last.at && (
           <div className="run-alert" role="alert">
             <i className="ti ti-alert-triangle" />

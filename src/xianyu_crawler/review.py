@@ -56,14 +56,17 @@ _TICKET_ATTRS = (
 
 
 def review_items(items: list[Item], requirement: str | None,
-                 settings: Settings, kind: str = "general") -> list[ReviewVerdict]:
+                 settings: Settings, kind: str = "general",
+                 on_item=None) -> list[ReviewVerdict]:
     """按顺序单独审核每件商品，失败的条目保留供补审。"""
     if not settings.review_enabled:
         return [ReviewVerdict(ok=True, reason=REVIEW_MANUAL, skipped=True) for _ in items]
     if not requirement or not items:
         return [ReviewVerdict(ok=True) for _ in items]
     out: list[ReviewVerdict] = []
-    for item in items:
+    for index, item in enumerate(items):
+        if on_item is not None:
+            on_item(index, len(items))
         try:
             content = _call_llm(_build_messages(item, requirement, settings, kind), settings)
             out.append(_parse_verdict(content))
