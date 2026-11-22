@@ -211,9 +211,29 @@ button { font-family: inherit; }
 .rec-group { margin-bottom: 26px; }
 .rec-group-head { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 11px; margin: 4px 0 13px; }
 .rec-group-head::after { content: ''; flex: 1; height: 1px; background: var(--line); }
-.folder-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(155px, 22%); gap: 18px; }
-.folder-nav { grid-area: 1 / 2; display: flex; flex-direction: column; gap: 10px; align-self: start; }
+.folder-layout { display: grid; grid-template-columns: minmax(0, 1fr) 14px var(--folder-w, 280px); gap: 0; align-items: start; }
+.folder-nav { grid-area: 1 / 3; display: flex; flex-direction: column; gap: 10px; align-self: start; }
 .folder-results { grid-area: 1 / 1; min-width: 0; }
+/* 拖动分割条: 左右拖调宽度, 点一下收起/展开右侧文件夹 */
+.folder-split {
+  grid-area: 1 / 2; align-self: stretch; min-height: 96px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--line2); cursor: col-resize; touch-action: none; border-radius: 3px;
+  transition: color .12s, background .12s;
+}
+.folder-split i { font-size: 15px; pointer-events: none; opacity: .55; transition: opacity .12s; }
+.folder-split:hover i, .folder-split[data-drag='1'] i { opacity: 1; }
+.folder-split:hover, .folder-split[data-drag='1'] { color: var(--acc); background: var(--s2); }
+/* 收起后只剩一个贴在右边缘的小按钮, 点它展开 */
+.folder-layout[data-collapsed='1'] { grid-template-columns: minmax(0, 1fr) 26px 0; }
+.folder-layout[data-collapsed='1'] .folder-split {
+  min-height: 0; height: 32px; margin-top: 2px; cursor: pointer;
+  background: var(--s2); color: var(--dim);
+  border: 1px solid var(--line); border-radius: 6px;
+}
+.folder-layout[data-collapsed='1'] .folder-split i { opacity: 1; }
+.folder-layout[data-collapsed='1'] .folder-split:hover { color: var(--acc); border-color: var(--acc); }
+.folder-layout[data-collapsed='1'] .folder-nav { display: none; }
 .folder-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .folder-heading h2 { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
 .item-sort { background: var(--s1); color: var(--fg); border: 1px solid var(--line); border-radius: var(--rad); font: inherit; font-size: 12px; padding: 6px 9px; max-width: 100%; }
@@ -612,6 +632,9 @@ button { font-family: inherit; }
   .settings-header { top: -16px; }
   .folder-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .folder-nav, .folder-results { grid-area: auto; }
+  /* 手机上文件夹是上方一行, 不需要分割条, 之前的收起状态也不生效 */
+  .folder-split { display: none; }
+  .folder-layout[data-collapsed='1'] .folder-nav { display: flex; }
   .folder-list { flex-direction: row; overflow-x: auto; }
   .folder-list button { flex: none; max-width: 150px; }
   /* 价格总览: 窄屏把粒度切换单独放一行, 标题和收起按钮留在第一行 */

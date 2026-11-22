@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import FolderLayout from '../components/FolderLayout'
 import { Attrs, Card, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
 import { yuan, fmtDate, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
@@ -47,9 +48,8 @@ export default function Drops({ refreshKey }) {
     <section>
       <h1 className="page-title">收藏监控</h1>
       {error && <p role="alert" className="test-err">{error}</p>}
-      <div className="folder-layout">
-        <Folders choices={choices} selected={selected?.id} onSelect={setFolderId}
-          visibility={visibility} onVisibility={setVisibility} counts={counts} />
+      <FolderLayout folders={<Folders choices={choices} selected={selected?.id} onSelect={setFolderId}
+        visibility={visibility} onVisibility={setVisibility} counts={counts} />}>
         <div className="folder-results">
       {selected && <div className="folder-heading">
         <h2>{selected.name}</h2>
@@ -101,7 +101,7 @@ export default function Drops({ refreshKey }) {
         </div>
       )}
         </div>
-      </div>
+      </FolderLayout>
     </section>
   )
 }

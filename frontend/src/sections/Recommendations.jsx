@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import FolderLayout from '../components/FolderLayout'
 import { Attrs, Card, Button, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
 import { yuan, fmtDate, fmtDateTime, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
@@ -206,9 +207,8 @@ export default function Recommendations({ refreshKey, onToast }) {
     <section>
       <h1 className="page-title">{isPublic ? '公开行情' : '待审推荐'}</h1>
       {error && <p role="alert" className="test-err">{error}</p>}
-      <div className="folder-layout">
-        <Folders choices={choices} selected={selected?.id} onSelect={setFolderId}
-          visibility={visibility} onVisibility={setVisibility} counts={counts} />
+      <FolderLayout folders={<Folders choices={choices} selected={selected?.id} onSelect={setFolderId}
+        visibility={visibility} onVisibility={setVisibility} counts={counts} />}>
         <div className="folder-results">
       {selected && <div className="folder-heading">
         <h2>{selected.name}</h2>
@@ -265,7 +265,7 @@ export default function Recommendations({ refreshKey, onToast }) {
         <div className="grid">{shown.map(renderCard)}</div>
       )}
         </div>
-      </div>
+      </FolderLayout>
     </section>
   )
 }
