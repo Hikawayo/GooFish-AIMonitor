@@ -384,9 +384,10 @@ def refresh_local_favorites(ctx, session: Session, settings: Settings) -> int:
         row.detail_checked_at = repo._now()
         previous = row.latest_price
         if reading.dead:
-            repo.mark_dead(session, row.item_id, "详情已失效")
+            repo.mark_dead(session, row.item_id, reading.dead_reason or "详情已失效")
             repo.add_event(session, row.item_id, "sold", {
-                "title": row.title, "url": row.url, "pic": row.pic_url, "reason": "详情已失效",
+                "title": row.title, "url": row.url, "pic": row.pic_url,
+                "reason": reading.dead_reason or "详情已失效",
             })
         elif reading.price is not None:
             # 平台优惠: 挂牌价没动但实付更低, 走势必须按实付价走, 否则这次降价永远看不到

@@ -17,6 +17,15 @@ from .parsing import to_price
 
 DETAIL_API = "mtop.taobao.idle.pc.detail"
 _DEAD_MARKERS = ("ITEM_DEL", "不存在", "已被删除", "已删除", "已下架", "下架", "ITEM_NOT_FOUND")
+
+
+def sold_reason(item: dict) -> str | None:
+    """已售出的商品接口仍回 SUCCESS, 只有 itemStatus 变负(-2), 必须单独认。"""
+    status = item.get("itemStatus")
+    if isinstance(status, (int, float)) and not isinstance(status, bool) and status < 0:
+        return "已售出" if int(status) == -2 else "已下架"
+    return None
+
 _ITEM_URL = "https://www.goofish.com/item?id={}"
 
 
@@ -75,6 +84,10 @@ def check_liveness(ctx, item_id: str, wait_ms: int = 2500) -> tuple[bool, str | 
     stats = _extract_stats(detail)
     blob = _ret_blob((detail or {}).get("ret"))
     if "SUCCESS" in blob:
+        item = ((detail or {}).get("data") or {}).get("itemDO") or {}
+        reason = sold_reason(item)
+        if reason:
+            return True, reason, stats
         return False, None, stats
     if any(m in blob for m in _DEAD_MARKERS):
         return True, "已删除", stats
@@ -91,6 +104,8 @@ def parse_detail_price(detail: dict | None, item_id: str) -> tuple[float | None,
     item = (detail.get("data") or {}).get("itemDO") or {}
     if str(item.get("itemId")) != item_id:
         return None, False
+    if sold_reason(item):
+        return None, True
     price = to_price(item.get("soldPrice"))
     return (price if price is not None and isfinite(price) and price > 0 else None), False
 
@@ -107,6 +122,7 @@ class DetailReading:
     original_price: float | None = None     # itemDO.originalPrice, 卖家降价前的挂牌价
     published_at: datetime | None = None    # itemDO.gmtCreate, naive UTC
     promo_price: float | None = None        # 平台优惠后的实付价(itemDO.promotionPriceDO)
+    dead_reason: str | None = None          # 已售出 / 已下架 / 详情已失效
 
 
 def _promo_price(item: dict, listing: float | None) -> float | None:
@@ -132,6 +148,9 @@ def parse_detail(detail: dict | None, item_id: str) -> DetailReading:
     price, dead = parse_detail_price(detail, item_id)
     reading = DetailReading(price=price, dead=dead)
     if dead or not detail:
+        if dead:
+            item = ((detail or {}).get("data") or {}).get("itemDO") or {}
+            reading.dead_reason = sold_reason(item) or "详情已失效"
         return reading
     item = (detail.get("data") or {}).get("itemDO") or {}
     if str(item.get("itemId")) != item_id:
