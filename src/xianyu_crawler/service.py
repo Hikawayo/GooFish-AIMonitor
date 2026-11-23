@@ -147,6 +147,9 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
             watch_scanned += 1
             previous = known.get(item.item_id)
             if previous is not None:
+                # 已失效 / 标了「近期不看」的, 不必再更新价格、写历史
+                if repo.is_dead(session, item.item_id) or repo.is_muted(session, item.item_id):
+                    continue
                 prev_price = repo.upsert_item_with_price(session, item, source="search")
                 previous.price = item.price
                 previous.observed_at = repo._now()

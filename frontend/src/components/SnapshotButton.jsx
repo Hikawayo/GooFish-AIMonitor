@@ -21,6 +21,9 @@ const toRow = (item) => ({
   list_price: item.list_price,
   original_price: item.original_price,
   publish_time: item.publish_time,
+  dead: item.dead,
+  dead_reason: item.dead_reason,
+  dead_at: item.dead_at,
 })
 
 /**

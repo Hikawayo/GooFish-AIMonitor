@@ -138,6 +138,7 @@ class RecommendationOut(BaseModel):
     rec_ok: bool | None = None            # LLM 裁决: True 通过 / False 未过 / None 未审
     dead: bool = False
     dead_reason: str | None = None
+    dead_at: str | None = None
     publish_time: str | None = None       # 闲鱼发布时间
     first_seen_at: str | None = None      # 入库时间
     rec_created_at: str | None = None     # 推荐时间
@@ -165,6 +166,7 @@ class FavoriteOut(BaseModel):
     pic_url: str | None = None
     dead: bool = False
     dead_reason: str | None = None
+    dead_at: str | None = None
     publish_time: str | None = None
     first_seen_at: str | None = None
     price_changed_at: str | None = None
@@ -284,7 +286,7 @@ def itemrow_to_fav(r: ItemRow) -> FavoriteOut:
         reduce_price=r.reduce_price or 0.0, location=r.location, shared_folder_key=r.shared_folder_key,
         condition=r.condition, free_shipping=r.free_shipping, seller_nick=r.seller_nick,
         favorited_at=_iso(r.favorited_at),
-        pic_url=r.pic_url, dead=r.dead, dead_reason=r.dead_reason,
+        pic_url=r.pic_url, dead=r.dead, dead_reason=r.dead_reason, dead_at=_iso(r.dead_at),
         publish_time=_iso(r.publish_time), first_seen_at=_iso(r.first_seen_at),
         price_changed_at=_iso(r.price_changed_at),
     )

@@ -204,13 +204,14 @@ export function renderSnapshot({ name, items, series }) {
     ctx.fillText(clip(ctx, item.location || '', cols[3].width), columnX[3], rowY)
 
     const tags = []
+    if (item.dead) tags.push(`${item.dead_reason === '已售出' ? '已售出' : '已失效'} ${shortDate(item.dead_at).slice(0, 5)}`)
     if (item.promo_price && item.list_price > item.promo_price) tags.push(`平台优惠 ${price(item.promo_price)}`)
     else if (item.original_price > item.price) tags.push(`已降 ${price(item.original_price - item.price)}`)
     if (item.attrs?.seat && item.attrs.seat !== '未知') tags.push(item.attrs.seat)
     if (item.attrs?.qty > 1) tags.push(`${item.attrs.qty} 张`)
     if (item.attrs?.bundle) tags.push('捆绑')
     if (item.attrs?.deposit) tags.push('定金')
-    ctx.fillStyle = tags.length && /^(平台优惠|已降)/.test(tags[0]) ? c.warn : c.dim
+    ctx.fillStyle = item.dead ? c.warn : (tags.length && /^(平台优惠|已降)/.test(tags[0]) ? c.warn : c.dim)
     ctx.fillText(clip(ctx, tags.join(' · '), cols[4].width), columnX[4], rowY)
   })
 

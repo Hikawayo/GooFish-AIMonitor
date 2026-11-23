@@ -14,6 +14,7 @@ export default function Drops({ refreshKey, onToast }) {
   const [visibility, setVisibility] = useState('mine')
   const [folderId, setFolderId] = useState('')
   const [sortOrder, setSortOrder] = useState(DEFAULT_SORT)
+  const [statusTab, setStatusTab] = useState('on')   // 在售 / 售出
   const sortTouched = useRef(false)
   const [cfg, setCfg] = useState(null)
   const [loadError, setLoadError] = useState('')
@@ -63,7 +64,10 @@ export default function Drops({ refreshKey, onToast }) {
     ?? choices.find((folder) => items.some((item) => inFolder(item, folder)))
     ?? choices[0]
   const shown = items.filter((item) => inFolder(item, selected))
-  const ordered = sortItems(shown, sortOrder)   // 渲染与导出共用同一顺序
+  // 在售 / 售出 分栏: 售出的不会再变价, 单独放一栏才好找
+  const status = statusTab
+  const byStatus = shown.filter((item) => (status === 'sold' ? item.dead : !item.dead))
+  const ordered = sortItems(byStatus, sortOrder)   // 渲染与导出共用同一顺序
   const counts = Object.fromEntries(choices.map((folder) => [
     folder.id, items.filter((item) => inFolder(item, folder)).length,
   ]))
@@ -78,6 +82,12 @@ export default function Drops({ refreshKey, onToast }) {
       {selected && <div className="folder-heading">
         <h2>{selected.name}</h2>
         <div className="folder-tools">
+          <div className="status-tabs" role="tablist">
+            <button type="button" className={statusTab === 'on' ? 'on' : ''}
+              onClick={() => setStatusTab('on')}>在售</button>
+            <button type="button" className={statusTab === 'sold' ? 'on' : ''}
+              onClick={() => setStatusTab('sold')}>售出</button>
+          </div>
           <ItemSort value={sortOrder} onChange={changeSort} onMakeDefault={makeSortDefault} />
           <SnapshotButton name={selected.name} watches={selected.watches} items={ordered} onToast={onToast} />
         </div>
@@ -86,7 +96,7 @@ export default function Drops({ refreshKey, onToast }) {
         <PriceTrend watches={selected.watches} refreshKey={refreshKey} />
       )}
       {shown.length === 0 ? (
-        <EmptyState title="还没有收藏" />
+        <EmptyState title={statusTab === 'sold' ? '没有已售出的商品' : '还没有收藏'} />
       ) : (
         <div className="grid">
           {ordered.map((it) => (
@@ -122,7 +132,9 @@ export default function Drops({ refreshKey, onToast }) {
                   items={[
                     ['上架', ago(it.publish_time)],
                     ['收藏', fmtDate(it.favorited_at)],
-                    ['调价', fmtDate(it.price_changed_at)],
+                    it.dead
+                      ? [it.dead_reason === '已售出' ? '售出' : '失效', fmtDate(it.dead_at)]
+                      : ['调价', fmtDate(it.price_changed_at)],
                   ]}
                 />
               </div>

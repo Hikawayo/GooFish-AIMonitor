@@ -48,9 +48,10 @@ def upsert_item_with_price(s: Session, item: Item, source: str,
                       dead_at=_now() if item.dead else None)
         s.add(row)
     else:
-        if prev is not None and item.price != prev:   # 价格变了 → 记调价时间
+        effective = row.promo_price if (row.promo_price and row.promo_price < item.price) else item.price
+        if prev is not None and effective != prev:   # 价格变了 → 记调价时间
             row.price_changed_at = _now()
-        row.latest_price = item.price
+        row.latest_price = effective
         row.reduce_price = reduce
         row.location = item.location
         row.condition = item.condition
@@ -70,7 +71,8 @@ def upsert_item_with_price(s: Session, item: Item, source: str,
             and item.original_price > item.price:
         row.original_price = item.original_price      # 平台给的最初挂牌价(详情精确值优先)
     # 首次入库时若知道「卖家最初挂牌价 + 发布时间」, 先补这个起点, 走势才不会从半路开始
-    s.add(PriceHistory(item_id=item.item_id, price=item.price))
+    observed = row.promo_price if (row.promo_price and row.promo_price < item.price) else item.price
+    s.add(PriceHistory(item_id=item.item_id, price=observed))
     s.commit()
     if (item.original_price and item.publish_time and item.original_price > item.price):
         seed_original_price(s, item.item_id, item.original_price, item.publish_time)

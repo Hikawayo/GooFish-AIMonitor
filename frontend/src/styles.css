@@ -259,6 +259,14 @@ button { font-family: inherit; }
 .folder-layout[data-collapsed='1'] .folder-split:hover { color: var(--acc); border-color: var(--acc); }
 .folder-layout[data-collapsed='1'] .folder-nav { display: none; }
 .folder-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+/* 在售 / 售出 分栏 */
+.status-tabs { display: inline-flex; background: var(--s2); border-radius: 8px; padding: 3px; gap: 2px; }
+.status-tabs button {
+  border: none; background: none; color: var(--dim); cursor: pointer;
+  font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px;
+}
+.status-tabs button.on { background: var(--s1); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px #00000012; }
+.status-tabs button:hover:not(.on) { color: var(--fg); }
 /* 标题右侧: 排序 + 快照 */
 .folder-tools { display: flex; align-items: center; gap: 8px; }
 .snapshot-btn { flex: none; }
