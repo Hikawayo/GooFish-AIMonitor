@@ -1,12 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import Select from '../components/Select'
-import { Card, Button, Spinner, Toggle, Field, ConfirmDialog } from '../components/ui'
+import { Card, Button, Spinner, EmptyState, Toggle, Field, ConfirmDialog } from '../components/ui'
+
+const NUM_FIELDS = [
+  ['schedule_minutes', '推荐抓取间隔'],
+  ['favorites_minutes', '收藏刷新间隔'],
+  ['min_drop_pct', '降价阈值（%）'],
+  ['min_drop_abs', '降价阈值（¥）'],
+  ['search_max_pages', '搜索翻页上限'],
+  ['favorites_max_pages', '收藏翻页上限'],
+  ['review_timeout', 'AI 审核超时'],
+  ['review_temperature', '模型温度'],
+  ['review_max_tokens', '最大 tokens'],
+  ['action_delay_min', '操作延迟下限'],
+  ['action_delay_max', '操作延迟上限'],
+  ['liveness_max_checks', '死链核活上限'],
+]
 
 export default function Settings({ status }) {
   const [cfg, setCfg] = useState(null)
+  const [loadError, setLoadError] = useState('')
   const [access, setAccess] = useState(null)
   const [saveError, setSaveError] = useState('')
+  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [pwd, setPwd] = useState('') // SMTP 密码单独管理: 只在用户输入时才提交
   const [token, setToken] = useState('') // LLM token 同理(只写)
@@ -18,38 +35,84 @@ export default function Settings({ status }) {
   const [confirmLogout, setConfirmLogout] = useState(false)
   const loginTimer = useRef(null)
 
-  useEffect(() => {
-    api.config().then(setCfg)
+  const loadAll = () => {
+    setLoadError('')
+    api.config()
+      .then((c) => {
+        setLoadError('')
+        setCfg(c)
+      })
+      .catch((error) => setLoadError(error.message || '加载设置失败'))
     api.access().then(setAccess).catch((error) => setSaveError(error.message))
-    api.loginStatus().then(setLogin)
+    api.loginStatus().then(setLogin).catch(() => {})
+  }
+
+  useEffect(() => {
+    loadAll()
     return () => clearInterval(loginTimer.current)
   }, [])
 
   const startLogin = async () => {
-    setLogin((l) => ({ ...l, status: 'starting', qr: null }))
-    await api.loginStart()
-    clearInterval(loginTimer.current)
-    loginTimer.current = setInterval(async () => {
-      const st = await api.loginStatus()
-      setLogin(st)
-      if (['success', 'expired', 'failed', 'idle', 'busy'].includes(st.status)) {
-        clearInterval(loginTimer.current)
+    setLogin((l) => ({ ...l, status: 'starting', qr: null, message: '正在打开登录页…' }))
+    try {
+      const first = await api.loginStart()
+      if (first?.status === 'busy') {
+        setLogin((l) => ({ ...l, status: 'busy', message: first.message || '已有用户正在扫码，请稍后再试' }))
+        return
       }
-    }, 2000)
+      clearInterval(loginTimer.current)
+      loginTimer.current = setInterval(async () => {
+        try {
+          const st = await api.loginStatus()
+          setLogin(st)
+          if (['success', 'expired', 'failed', 'idle', 'busy'].includes(st.status)) {
+            clearInterval(loginTimer.current)
+          }
+        } catch (error) {
+          clearInterval(loginTimer.current)
+          setLogin((l) => ({ ...l, status: 'failed', message: error.message || '获取扫码状态失败' }))
+        }
+      }, 2000)
+    } catch (error) {
+      setLogin((l) => ({ ...l, status: 'failed', message: error.message || '启动扫码失败，请重试' }))
+    }
   }
 
   const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }))
 
-  // 密码/token 留空 → 发 null(不修改); 输入了 → 发新值
-  const payload = () => ({
-    ...cfg,
-    smtp_pass: pwd.trim() || null,
-    review_api_token: token.trim() || null,
-  })
+  // 密码/token 留空 → 发 null(不修改); 数值字段统一校验非空且为有效数字
+  const buildPayload = () => {
+    const out = { ...cfg }
+    for (const [key, label] of NUM_FIELDS) {
+      const raw = out[key]
+      if (raw === '' || raw === null || raw === undefined) {
+        throw new Error(`请填写「${label}」`)
+      }
+      const num = Number(raw)
+      if (!Number.isFinite(num)) {
+        throw new Error(`「${label}」必须是有效数字`)
+      }
+      out[key] = num
+    }
+    if (!access?.member && out.smtp_port !== '' && out.smtp_port !== null && out.smtp_port !== undefined) {
+      const port = Number(out.smtp_port)
+      if (!Number.isFinite(port)) throw new Error('「SMTP 端口」必须是有效数字')
+      out.smtp_port = port
+    } else if (!access?.member && out.smtp_port === '') {
+      out.smtp_port = null
+    }
+    return {
+      ...out,
+      smtp_pass: pwd.trim() || null,
+      review_api_token: token.trim() || null,
+    }
+  }
 
   const save = async () => {
+    if (saving) return
+    setSaving(true)
     try {
-      const next = await api.saveConfig(payload())
+      const next = await api.saveConfig(buildPayload())
       setCfg(next)
       setPwd('')
       setToken('')
@@ -58,6 +121,8 @@ export default function Settings({ status }) {
       setTimeout(() => setSaved(false), 2000)
     } catch (error) {
       setSaveError(error.message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -65,11 +130,13 @@ export default function Settings({ status }) {
     setTesting(true)
     setTestMsg(null)
     try {
-      await api.saveConfig(payload()) // 先存最新配置再测
+      await api.saveConfig(buildPayload()) // 先存最新配置再测
       setPwd('')
       const r = await api.testEmail()
       setTestMsg(r.ok ? { ok: true, text: `已发送到 ${r.to}` } : { ok: false, text: r.error })
-      if (r.ok) api.config().then(setCfg)
+      if (r.ok) api.config().then(setCfg).catch(() => {})
+    } catch (error) {
+      setTestMsg({ ok: false, text: error.message || '发送测试邮件失败' })
     } finally {
       setTesting(false)
     }
@@ -80,7 +147,7 @@ export default function Settings({ status }) {
     setLlmTesting(true)
     setLlmMsg(null)
     try {
-      await api.saveConfig(payload())
+      await api.saveConfig(buildPayload())
       setToken('')
       const r = await api.testReview()
       setLlmMsg(
@@ -88,7 +155,7 @@ export default function Settings({ status }) {
           ? { ok: true, text: `AI 审核可用 · 模型 ${r.model}` }
           : { ok: false, text: r.error },
       )
-      api.config().then(setCfg)
+      api.config().then(setCfg).catch(() => {})
     } catch (error) {
       setLlmMsg({ ok: false, text: error.message })
     } finally {
@@ -99,7 +166,11 @@ export default function Settings({ status }) {
   const logout = async () => {
     setConfirmLogout(false)
     clearInterval(loginTimer.current)
-    setLogin(await api.logout())
+    try {
+      setLogin(await api.logout())
+    } catch (error) {
+      setSaveError(error.message || '退出登录失败')
+    }
   }
 
   // 「登录中」: 已扫码等手机确认 / 刚启动还没出二维码
@@ -107,14 +178,22 @@ export default function Settings({ status }) {
     ['starting', 'scanned'].includes(login.status) ||
     (login.status === 'waiting' && !login.qr)
 
-  if (!cfg) return <Spinner />
+  if (!cfg) {
+    return loadError ? (
+      <EmptyState
+        title="加载设置失败"
+        sub={loadError}
+        action={<Button onClick={loadAll}>重试</Button>}
+      />
+    ) : <Spinner />
+  }
 
   return (
     <section>
       <div className="settings-header">
         <h1 className="page-title">设置</h1>
         {saved && <span className="saved-hint" role="status">已保存</span>}
-        <Button onClick={save}>保存设置</Button>
+        <Button onClick={save} disabled={saving}>{saving ? '保存中…' : '保存设置'}</Button>
       </div>
       {saveError && <p role="alert" className="test-err">{saveError}</p>}
 
@@ -140,22 +219,24 @@ export default function Settings({ status }) {
           </div>
         ) : (
           <div className="login-row">
-            <span className={login.has_state ? 'login-state on' : 'login-state'}>
-              {login.has_state
-                ? `● 已登录${login.account ? '：' + login.account : ''}`
-                : '○ 未登录'}
+            <span className={'login-state' + (login.expired ? ' err' : login.has_state ? ' on' : '')}>
+              {login.expired
+                ? `● 登录已过期${login.account ? '（' + login.account + '）' : ''}，请重新扫码`
+                : login.has_state
+                  ? `● 已登录${login.account ? '：' + login.account : ''}`
+                  : '○ 未登录'}
             </span>
             {['expired', 'failed', 'busy'].includes(login.status) && (
               <span className="test-err">{login.message}</span>
             )}
             <div className="grow" />
-            {login.has_state && (
+            {(login.has_state || login.expired) && (
               <Button variant="ghost" onClick={() => setConfirmLogout(true)}>
                 退出 / 换号
               </Button>
             )}
             <Button onClick={startLogin} disabled={['waiting'].includes(login.status)}>
-              {login.has_state ? '重新扫码登录' : '扫码登录'}
+              {login.has_state || login.expired ? '重新扫码登录' : '扫码登录'}
             </Button>
           </div>
         )}
@@ -167,43 +248,43 @@ export default function Settings({ status }) {
           <Field label="推荐抓取间隔（分钟）">
             <input
               type="number"
-              value={cfg.schedule_minutes}
-              onChange={(e) => set('schedule_minutes', Number(e.target.value))}
+              value={cfg.schedule_minutes ?? ''}
+              onChange={(e) => set('schedule_minutes', e.target.value)}
             />
           </Field>
           <Field label="收藏刷新间隔（分钟）">
             <input
               type="number"
-              value={cfg.favorites_minutes}
-              onChange={(e) => set('favorites_minutes', Number(e.target.value))}
+              value={cfg.favorites_minutes ?? ''}
+              onChange={(e) => set('favorites_minutes', e.target.value)}
             />
           </Field>
           <Field label="降价阈值（%）">
             <input
               type="number"
-              value={cfg.min_drop_pct}
-              onChange={(e) => set('min_drop_pct', Number(e.target.value))}
+              value={cfg.min_drop_pct ?? ''}
+              onChange={(e) => set('min_drop_pct', e.target.value)}
             />
           </Field>
           <Field label="降价阈值（¥）">
             <input
               type="number"
-              value={cfg.min_drop_abs}
-              onChange={(e) => set('min_drop_abs', Number(e.target.value))}
+              value={cfg.min_drop_abs ?? ''}
+              onChange={(e) => set('min_drop_abs', e.target.value)}
             />
           </Field>
           <Field label="搜索翻页上限">
             <input
               type="number"
-              value={cfg.search_max_pages}
-              onChange={(e) => set('search_max_pages', Number(e.target.value))}
+              value={cfg.search_max_pages ?? ''}
+              onChange={(e) => set('search_max_pages', e.target.value)}
             />
           </Field>
           <Field label="收藏翻页上限">
             <input
               type="number"
-              value={cfg.favorites_max_pages}
-              onChange={(e) => set('favorites_max_pages', Number(e.target.value))}
+              value={cfg.favorites_max_pages ?? ''}
+              onChange={(e) => set('favorites_max_pages', e.target.value)}
             />
           </Field>
         </div>
@@ -213,41 +294,53 @@ export default function Settings({ status }) {
         </div>
       </Card>
 
-      {!access?.member && <Card className="form-card">
-        <h2 className="form-title">邮件通知（SMTP）</h2>
+      <Card className="form-card">
+        <h2 className="form-title">{access?.member ? '邮件通知' : '邮件通知（SMTP）'}</h2>
         <div className="form-grid">
-          <Field label="收件邮箱">
-            <input value={cfg.notify_to} onChange={(e) => set('notify_to', e.target.value)} />
-          </Field>
-          <Field label="SMTP 服务器">
+          <Field
+            label="收件邮箱"
+            hint={access?.member ? '留空则发往管理员默认邮箱；填写后发到你自己的邮箱' : undefined}
+          >
             <input
-              value={cfg.smtp_host || ''}
-              onChange={(e) => set('smtp_host', e.target.value)}
-              placeholder="smtp.exmail.qq.com"
+              value={cfg.notify_to}
+              onChange={(e) => set('notify_to', e.target.value)}
+              placeholder={access?.member ? '留空使用管理员默认邮箱' : ''}
             />
           </Field>
-          <Field label="端口">
-            <input
-              type="number"
-              value={cfg.smtp_port ?? 465}
-              onChange={(e) => set('smtp_port', Number(e.target.value))}
-            />
-          </Field>
-          <Field label="发件账号">
-            <input
-              value={cfg.smtp_user || ''}
-              onChange={(e) => set('smtp_user', e.target.value)}
-              placeholder="you@example.com"
-            />
-          </Field>
-          <Field label="密码 / 授权码" hint={cfg.smtp_pass_set ? '已设置，留空则不修改' : '邮箱 SMTP 授权码'}>
-            <input
-              type="password"
-              value={pwd}
-              onChange={(e) => setPwd(e.target.value)}
-              placeholder={cfg.smtp_pass_set ? '••••••（已设置）' : ''}
-            />
-          </Field>
+          {!access?.member && (
+            <>
+              <Field label="SMTP 服务器">
+                <input
+                  value={cfg.smtp_host || ''}
+                  onChange={(e) => set('smtp_host', e.target.value)}
+                  placeholder="smtp.exmail.qq.com"
+                />
+              </Field>
+              <Field label="端口">
+                <input
+                  type="number"
+                  value={cfg.smtp_port ?? ''}
+                  onChange={(e) => set('smtp_port', e.target.value)}
+                  placeholder="465"
+                />
+              </Field>
+              <Field label="发件账号">
+                <input
+                  value={cfg.smtp_user || ''}
+                  onChange={(e) => set('smtp_user', e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </Field>
+              <Field label="密码 / 授权码" hint={cfg.smtp_pass_set ? '已设置，留空则不修改' : '邮箱 SMTP 授权码'}>
+                <input
+                  type="password"
+                  value={pwd}
+                  onChange={(e) => setPwd(e.target.value)}
+                  placeholder={cfg.smtp_pass_set ? '••••••（已设置）' : ''}
+                />
+              </Field>
+            </>
+          )}
         </div>
         <div className="req-field">
           <div className="form-row">
@@ -269,7 +362,7 @@ export default function Settings({ status }) {
             {testing ? '发送中…' : '发送测试邮件'}
           </Button>
         </div>
-      </Card>}
+      </Card>
 
       <Card className="form-card">
         <h2 className="form-title">AI 审核</h2>
@@ -305,23 +398,23 @@ export default function Settings({ status }) {
           <Field label="超时（秒）">
             <input
               type="number"
-              value={cfg.review_timeout}
-              onChange={(e) => set('review_timeout', Number(e.target.value))}
+              value={cfg.review_timeout ?? ''}
+              onChange={(e) => set('review_timeout', e.target.value)}
             />
           </Field>
           <Field label="温度">
             <input
               type="number"
               step="0.1"
-              value={cfg.review_temperature}
-              onChange={(e) => set('review_temperature', Number(e.target.value))}
+              value={cfg.review_temperature ?? ''}
+              onChange={(e) => set('review_temperature', e.target.value)}
             />
           </Field>
           <Field label="最大 tokens">
             <input
               type="number"
-              value={cfg.review_max_tokens}
-              onChange={(e) => set('review_max_tokens', Number(e.target.value))}
+              value={cfg.review_max_tokens ?? ''}
+              onChange={(e) => set('review_max_tokens', e.target.value)}
             />
           </Field>
         </div>
@@ -362,23 +455,23 @@ export default function Settings({ status }) {
             <input
               type="number"
               step="0.5"
-              value={cfg.action_delay_min}
-              onChange={(e) => set('action_delay_min', Number(e.target.value))}
+              value={cfg.action_delay_min ?? ''}
+              onChange={(e) => set('action_delay_min', e.target.value)}
             />
           </Field>
           <Field label="操作延迟上限（秒）">
             <input
               type="number"
               step="0.5"
-              value={cfg.action_delay_max}
-              onChange={(e) => set('action_delay_max', Number(e.target.value))}
+              value={cfg.action_delay_max ?? ''}
+              onChange={(e) => set('action_delay_max', e.target.value)}
             />
           </Field>
           <Field label="死链核活上限（条/轮）">
             <input
               type="number"
-              value={cfg.liveness_max_checks}
-              onChange={(e) => set('liveness_max_checks', Number(e.target.value))}
+              value={cfg.liveness_max_checks ?? ''}
+              onChange={(e) => set('liveness_max_checks', e.target.value)}
             />
           </Field>
           <Field label="搜索页 URL">

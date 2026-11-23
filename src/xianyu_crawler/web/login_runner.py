@@ -1,10 +1,11 @@
 """控制台图形化扫码登录: 后台 headless 浏览器开闲鱼登录页, 截二维码给前端扫,
-扫码确认成功后存 storage_state.json。复用 runner 全局浏览器锁(与抓取串行)。
+扫码确认成功后存 storage_state.json。使用独立扫码锁, 不阻塞抓取队列。
 """
 from __future__ import annotations
 
 import base64
 import json
+import threading
 import time
 import urllib.parse
 from datetime import datetime, timezone
@@ -13,10 +14,11 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 from ..anti_detect import pick_profile
-from . import account, runner, runtime          # account: 头像缓存; runner: 复用全局浏览器锁 + runtime.login_state()
+from . import account, runtime
 
 LOGIN_URL = "https://www.goofish.com/login"
-_TIMEOUT_S = 180               # 二维码等待上限
+_TIMEOUT_S = 90                # 二维码等待上限(缩短以尽快释放浏览器)
+_LOGIN_LOCK = threading.Lock()
 
 # 前端轮询读这里: status=idle|starting|waiting|success|expired|failed|busy
 
@@ -48,24 +50,26 @@ def _account() -> str | None:
 
 
 def status() -> dict:
-    """给前端: 登录流程状态 + 是否已有登录态 + 闲鱼昵称。"""
-    state_file = runtime.data_dir() / "storage_state.json"
+    """给前端: 登录流程状态 + 是否已有有效登录态 + 过期信息 + 闲鱼昵称。"""
+    expired = runtime.login_expired_info()
     return {
         "status": runtime.login_state()["status"],
         "qr": runtime.login_state()["qr"],
         "message": runtime.login_state()["message"],
-        "has_state": state_file.exists(),
+        "has_state": runtime.has_login(),
+        "expired": expired is not None,
+        "expired_reason": expired.get("reason") if expired else None,
         "account": _account(),
         "avatar": account.avatar(),
     }
 
 
 def start() -> dict:
-    """启动扫码登录流程(后台线程)。已在进行中/抓取占用则不重入。"""
+    """启动扫码登录流程(后台线程)。使用独立扫码锁, 不阻塞抓取队列。"""
     if runtime.login_state()["status"] in ("starting", "waiting", "scanned"):
         return {"status": runtime.login_state()["status"]}
-    if not runner._LOCK.acquire(blocking=False):
-        return {"status": "busy", "message": "正在抓取，请稍后再试"}
+    if not _LOGIN_LOCK.acquire(blocking=False):
+        return {"status": "busy", "message": "已有其他用户正在扫码登录，请稍后再试"}
     runtime.login_state().update(status="starting", qr=None, message="正在打开登录页…", at=_now())
     runtime.start_thread(_run)
     return {"status": "starting"}
@@ -96,12 +100,12 @@ def logout() -> dict:
         f.unlink()
     except FileNotFoundError:
         pass
+    runtime.clear_login_expired()
     runtime.login_state().update(status="idle", qr=None, message="已退出登录", at=_now())
     return status()
 
 
 def _run() -> None:
-    runtime.job_state()["running"] = True
     runtime.data_dir().mkdir(parents=True, exist_ok=True)
     state_path = str(runtime.data_dir() / "storage_state.json")
     prof = pick_profile()
@@ -137,6 +141,13 @@ def _run() -> None:
             if ok:
                 Path(state_path).parent.mkdir(parents=True, exist_ok=True)
                 ctx.storage_state(path=state_path)
+                runtime.clear_login_expired()
+                try:
+                    with runtime.session() as db:
+                        from ..storage import repo
+                        repo.update_config(db, login_alert_sent_at=None)
+                except Exception:
+                    pass
                 runtime.login_state().update(status="success", qr=None, message="登录成功，已保存登录态", at=_now())
             else:
                 runtime.login_state().update(status="expired", qr=None, message="二维码超时，请重试", at=_now())
@@ -144,5 +155,4 @@ def _run() -> None:
     except Exception as e:  # noqa: BLE001 - 后台作业, 记录不抛
         runtime.login_state().update(status="failed", qr=None, message=f"登录出错: {e}", at=_now())
     finally:
-        runtime.job_state()["running"] = False
-        runner._LOCK.release()
+        _LOGIN_LOCK.release()

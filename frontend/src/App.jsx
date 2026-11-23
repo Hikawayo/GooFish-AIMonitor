@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { api } from './api'
+import { api, onAuthExpired } from './api'
 import { yuan, fmtDateTime } from './util'
 import Recommendations from './sections/Recommendations'
 import Drops from './sections/Drops'
@@ -21,7 +21,7 @@ const NAV = [
 const EVENT_TABS = [
   { key: 'all', label: '全部', types: null },
   { key: 'new_recommendation', label: '新推荐', types: ['new_recommendation'] },
-  { key: 'price_drop', label: '降价', types: ['price_drop'] },
+  { key: 'price_drop', label: '降价', types: ['price_drop', 'target_price'] },
   { key: 'sold', label: '售出', types: ['sold'] },
 ]
 
@@ -33,12 +33,21 @@ function EventRow({ e }) {
   let icon = 'ti-bell'
   let main = e.type
   let sub = ''
-  if (e.type === 'price_drop') {
+  if (e.type === 'target_price') {
+    warn = true
+    icon = 'ti-target'
+    main = (
+      <>
+        <b>命中目标价 {yuan(p.price)}</b> · {p.title || ''}
+      </>
+    )
+    sub = `${p.watch ? `${p.watch} · ` : ''}目标 ≤ ${yuan(p.target_price)}`
+  } else if (e.type === 'price_drop') {
     warn = true
     icon = 'ti-trending-down'
     main = (
       <>
-        <b>降价 ¥{Math.round(p.drop_abs || 0).toLocaleString('zh-CN')}</b> · {p.title || ''}
+        <b>{p.public ? '公开组降价' : '降价'} ¥{Math.round(p.drop_abs || 0).toLocaleString('zh-CN')}</b> · {p.title || ''}
       </>
     )
     sub = p.prev_price ? `${yuan(p.prev_price)} → ${yuan(p.curr_price)}` : p.curr_price ? yuan(p.curr_price) : ''
@@ -100,7 +109,10 @@ export default function App() {
   const [status, setStatus] = useState(null)
   const [stats, setStats] = useState(ZERO)
   const [events, setEvents] = useState(null)
-  const [login, setLogin] = useState({ has_state: false })
+  const [login, setLogin] = useState({ has_state: false, expired: false })
+  const [authExpired, setAuthExpired] = useState('')
+  const [netOffline, setNetOffline] = useState(false)
+  const netFailCount = useRef(0)
   const [toast, setToast] = useState(null)
   // 失败提示条: 关掉后只在下一轮新失败时再出现
   const [dismissedError, setDismissedError] = useState(null)
@@ -115,6 +127,7 @@ export default function App() {
   const [eventTab, setEventTab] = useState('all')
   const [watchList, setWatchList] = useState([])
   const [runMenu, setRunMenu] = useState(false)
+  const [triggering, setTriggering] = useState(false)
   const wasRunning = useRef(false)
 
   const palette = paletteOf(theme.key, theme.custom)
@@ -156,20 +169,26 @@ export default function App() {
     setTimeout(() => setToast(null), 4500)
   }
 
+  useEffect(() => onAuthExpired((msg) => setAuthExpired(msg)), [])
+
   const poll = async () => {
     try {
       const [st, sg, ev, lg] = await Promise.all([
         api.status(), api.stats(), api.events(), api.loginStatus(),
       ])
+      netFailCount.current = 0
+      setNetOffline(false)
+      setAuthExpired('')
       setStatus(st)
       setStats(sg)
       setEvents(ev)
       setLogin(lg)
-      if (wasRunning.current && !st.running) {
+      const busyNow = !!(st.running || st.queued)
+      if (wasRunning.current && !busyNow) {
         setRefreshKey((k) => k + 1)
         if (st.last?.skipped) {
           showToast(st.last.skipped === 'paused' ? '已暂停，本轮没有抓取' : '上一轮还在跑，这次跳过了')
-        } else if (st.last?.error) showToast(`抓取出错：${st.last.error}`)
+        } else if (st.last?.error) showToast(`抓取出错：${st.last.error === 'login_expired' ? '闲鱼登录已过期，请重新扫码' : st.last.error}`)
         else if (st.last) {
           const drops = st.last.drops ?? 0
           showToast(
@@ -179,9 +198,14 @@ export default function App() {
           )
         }
       }
-      wasRunning.current = st.running
-    } catch {
-      /* 服务未就绪, 忽略 */
+      wasRunning.current = busyNow
+    } catch (error) {
+      if (error?.authExpired) {
+        setAuthExpired(error.message)
+      } else {
+        netFailCount.current += 1
+        if (netFailCount.current >= 2) setNetOffline(true)
+      }
     }
   }
 
@@ -197,20 +221,37 @@ export default function App() {
 
   const run = async (watch) => {
     setRunMenu(false)
+    if (triggering) return
     if (running) {
       showToast('正在抓取中，请稍后再试')
       return
     }
+    if (queued) {
+      showToast(`已在排队中（第 ${queuePos} 位），无需重复触发`)
+      return
+    }
+    setTriggering(true)
     try {
-      await api.run(watch)
-      showToast(watch ? `已触发「${watch}」抓取…` : '已触发全部抓取，完成后自动刷新')
+      const res = await api.run(watch)
+      if (res?.deduped) {
+        showToast(`已在排队中（第 ${res.position || 1} 位）`)
+      } else if ((res?.position || 0) > 1) {
+        showToast(`已加入队列（第 ${res.position} 位），轮到后自动开始`)
+      } else {
+        showToast(watch ? `已触发「${watch}」抓取…` : '已触发全部抓取，完成后自动刷新')
+      }
       poll()
     } catch (error) {
       showToast(error.message)
+    } finally {
+      setTriggering(false)
     }
   }
 
   const running = status?.running
+  const queued = !!status?.queued && !running
+  const queuePos = status?.queue_position || 0
+  const busy = !!(running || queued)
   const progress = status?.progress
   const percent = progress && progress.total > 0
     ? Math.min(100, Math.round((progress.done / progress.total) * 100))
@@ -221,8 +262,10 @@ export default function App() {
   useEffect(() => {
     document.title = running && percent !== null
       ? `${percent}% 抓取中 · 海鲜价格监控`
-      : '海鲜价格监控'
-  }, [running, percent])
+      : queued
+        ? '排队中 · 海鲜价格监控'
+        : '海鲜价格监控'
+  }, [running, queued, percent])
   const metrics = [
     { k: '今日降价', i: 'ti-trending-down', v: stats.drops_today },
     { k: '已失效', i: 'ti-circle-x', v: stats.dead },
@@ -243,10 +286,14 @@ export default function App() {
           海鲜价格监控
         </div>
         <div className="grow" />
-        <div className={'live' + (running ? ' on' : '')} role="status">
+        <div className={'live' + (busy ? ' on' : login.expired ? ' err' : '')} role="status">
           {running
             ? (percent === null ? '抓取中…' : `抓取中 ${percent}%${step ? ` · ${step}` : ''}`)
-            : login.has_state ? '' : '未登录'}
+            : queued
+              ? `排队中${queuePos > 1 ? `（第 ${queuePos} 位）` : '…'}`
+              : login.expired
+                ? '闲鱼登录已过期'
+                : login.has_state ? '' : '未登录'}
         </div>
         <div className="skins">
           <button
@@ -287,18 +334,22 @@ export default function App() {
         </button>
         <div className="run-wrap">
           <button
-            className={'run' + (running ? ' busy' : '')}
-            aria-busy={running}
+            className={'run' + (busy ? ' busy' : '')}
+            aria-busy={busy}
             onClick={() => {
               if (running) {
                 showToast('正在抓取中，请稍后再试')
+                return
+              }
+              if (queued) {
+                showToast(`已在排队中（第 ${queuePos} 位），请稍候`)
                 return
               }
               setRunMenu((o) => !o)
             }}
           >
             <i className="ti ti-player-play" />
-            立即运行
+            {queued ? '排队中' : '立即运行'}
             <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
           </button>
           {runMenu && (
@@ -345,14 +396,14 @@ export default function App() {
         <Link
           to="/settings"
           className="acct"
-          title={login.account ? `已登录：${login.account}` : login.has_state ? '已登录' : '未登录 · 去扫码'}
+          title={login.expired ? '闲鱼登录已过期 · 点此重新扫码' : login.account ? `已登录：${login.account}` : login.has_state ? '已登录' : '未登录 · 去扫码'}
         >
           <span className="av">
             {login.account ? login.account[0].toUpperCase() : <i className="ti ti-user" />}
             {login.avatar && <img src={login.avatar} alt="" onError={(e) => e.currentTarget.remove()} />}
           </span>
-          <span className="who">{login.account || (login.has_state ? '已登录' : '未登录')}</span>
-          <span className={'dot ' + (login.has_state ? 'on' : 'off')} />
+          <span className="who">{login.expired ? '登录已过期' : login.account || (login.has_state ? '已登录' : '未登录')}</span>
+          <span className={'dot ' + (login.expired ? 'err' : login.has_state ? 'on' : 'off')} />
         </Link>
       </div>
 
@@ -364,7 +415,30 @@ export default function App() {
             <span style={{ width: `${percent}%` }} />
           </div>
         )}
-        {!running && (status?.last?.error || status?.last?.warn) && dismissedError !== status.last.at && (
+        {authExpired && (
+          <div className="run-alert" role="alert" data-kind="error">
+            <i className="ti ti-alert-triangle" />
+            <span>{authExpired}（页面数据已停止自动刷新）</span>
+            <button className="btn btn-sm" onClick={() => window.location.reload()}>刷新重新登录</button>
+          </div>
+        )}
+        {!authExpired && netOffline && (
+          <div className="run-alert" role="alert" data-kind="warn">
+            <i className="ti ti-alert-circle" />
+            <span>暂时连不上服务器，请检查网络</span>
+            <button className="btn btn-sm" onClick={() => poll()}>重试</button>
+          </div>
+        )}
+        {!authExpired && login.expired && (
+          <div className="run-alert" role="alert" data-kind="error">
+            <i className="ti ti-alert-triangle" />
+            <span>{login.expired_reason || '闲鱼登录已过期，搜索与收藏刷新已暂停；重新扫码即可恢复'}</span>
+            <Link className="btn btn-sm" to="/settings">去重新扫码</Link>
+          </div>
+        )}
+        {!running && (status?.last?.error || status?.last?.warn)
+          && !(login.expired && status.last.error === 'login_expired')
+          && dismissedError !== status.last.at && (
           <div className="run-alert" role="alert" data-kind={status.last.error ? 'error' : 'warn'}>
             <i className={'ti ' + (status.last.error ? 'ti-alert-triangle' : 'ti-alert-circle')} />
             <span>
@@ -400,7 +474,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/recommendations" replace />} />
           <Route
             path="/recommendations"
-            element={<Recommendations refreshKey={refreshKey} onToast={showToast} />}
+            element={<Recommendations refreshKey={refreshKey} onToast={showToast} login={login} />}
           />
           <Route path="/favorites" element={<Drops refreshKey={refreshKey} onToast={showToast} />} />
           <Route path="/watches" element={<Watches />} />

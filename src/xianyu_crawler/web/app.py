@@ -1,5 +1,6 @@
 """FastAPI 控制台后端。"""
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -7,15 +8,15 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from . import runtime, runner, dto, login_runner, sharing
-from .. import service, notifier, review, trend
+from .. import digest, service, notifier, review, trend
 from ..models import Item
 from ..storage import repo
-from ..storage.orm import ItemRow, WatchFolder, WatchMatch
+from ..storage.orm import ItemRow, WatchFolder, WatchMatch, WatchRow
 
 # 商品排序: 前端下拉的取值, 也是本人默认排序的合法范围
 SORTS = {"published-desc", "published-asc", "price-asc", "price-desc"}
@@ -68,26 +69,34 @@ def api_list_watches(s: Session = Depends(get_db)):
 
 @app.post("/api/watches", response_model=dto.WatchOut)
 def api_create_watch(body: dto.WatchIn, s: Session = Depends(get_db)):
+    from . import scheduler
+
     validate_folder(s, body.folder_id)
-    return dto.watchrow_to_out(repo.add_watch(s, **dto.watchin_to_fields(body)))
+    row = repo.add_watch(s, **dto.watchin_to_fields(body))
+    cfg = repo.get_config(s)
+    scheduler.ensure_scheduled(cfg.schedule_minutes, cfg.favorites_minutes)
+    sharing.invalidate()
+    return dto.watchrow_to_out(row)
 
 
 @app.put("/api/watches/{wid}", response_model=dto.WatchOut)
 def api_update_watch(wid: int, body: dto.WatchIn, s: Session = Depends(get_db)):
     validate_folder(s, body.folder_id)
     fields = dto.watchin_to_fields(body)
-    for field in ("public", "folder_id"):
+    for field in ("public", "folder_id", "archived", "target_price"):
         if field not in body.model_fields_set:
             fields.pop(field)
     row = repo.update_watch(s, wid, **fields)
     if row is None:
         raise HTTPException(404, "watch not found")
+    sharing.invalidate()
     return dto.watchrow_to_out(row)
 
 
 @app.delete("/api/watches/{wid}")
 def api_delete_watch(wid: int, s: Session = Depends(get_db)):
     repo.delete_watch(s, wid)
+    sharing.invalidate()
     return {"ok": True}
 
 
@@ -117,6 +126,35 @@ def api_create_folder(body: FolderName, s: Session = Depends(get_db)):
         s.add(existing)
         s.commit()
     return dto.FolderOut(id=existing.id, name=existing.name)
+
+
+@app.put("/api/watch-folders/{fid}", response_model=dto.FolderOut)
+def api_rename_folder(fid: int, body: FolderName, s: Session = Depends(get_db)):
+    folder = s.get(WatchFolder, fid)
+    if folder is None:
+        raise HTTPException(404, "文件夹不存在")
+    name = body.name.strip()
+    if not name or len(name) > 80:
+        raise HTTPException(422, "文件夹名称须为 1–80 字")
+    conflict = s.scalar(select(WatchFolder).where(WatchFolder.name == name, WatchFolder.id != fid))
+    if conflict is not None:
+        raise HTTPException(409, "已有同名文件夹")
+    folder.name = name
+    s.commit()
+    sharing.invalidate()
+    return dto.FolderOut(id=folder.id, name=folder.name)
+
+
+@app.delete("/api/watch-folders/{fid}")
+def api_delete_folder(fid: int, s: Session = Depends(get_db)):
+    folder = s.get(WatchFolder, fid)
+    if folder is None:
+        raise HTTPException(404, "文件夹不存在")
+    s.execute(update(WatchRow).where(WatchRow.folder_id == fid).values(folder_id=None))
+    s.delete(folder)
+    s.commit()
+    sharing.invalidate()
+    return {"ok": True}
 
 
 @app.get("/api/shared")
@@ -150,8 +188,9 @@ def api_item_prices(item_id: str, s: Session = Depends(get_db)):
 
 @app.get("/api/price-trend")
 def api_price_trend(watch_ids: str = "", mode: str = "all", tz: int = 480,
-                    min_price: float | None = None, s: Session = Depends(get_db)):
-    """一个或多个条件内的价格总览: 分桶后的最低/中位序列 + 每件商品自己的点。"""
+                    min_price: float | None = None, seat: str = "",
+                    s: Session = Depends(get_db)):
+    """一个或多个条件内的价格总览: 分桶后的最低/P25/中位序列 + 席种筛选 + 跨组对比。"""
     ids = sorted({int(part) for part in watch_ids.split(",") if part.strip().isdigit()})
     if not ids:
         raise HTTPException(422, "请先选择一个条件")
@@ -165,12 +204,20 @@ def api_price_trend(watch_ids: str = "", mode: str = "all", tz: int = 480,
         raise HTTPException(422, "价格下限不能是负数")
 
     attrs = repo.item_attrs(s, ids)
+    seats = sorted({str(meta["seat"]) for meta in attrs.values()
+                    if meta and meta.get("seat") and meta.get("seat") != "未知"})
+    rows = repo.trend_rows(s, ids)
+    seat_clean = seat.strip()
+    if seat_clean:
+        seat_ids = {iid for iid, meta in attrs.items() if meta and meta.get("seat") == seat_clean}
+        rows = [row for row in rows if str(row[0]) in seat_ids]
     comparable = {item_id for item_id, meta in attrs.items() if trend.is_comparable(meta)}
-    data = trend.build(repo.trend_rows(s, ids), mode=mode, tz_minutes=tz, min_price=min_price,
+    data = trend.build(rows, mode=mode, tz_minutes=tz, min_price=min_price,
                        comparable_ids=comparable if attrs else None)
     # 只统计真的画进图里的商品, 否则会把已被筛掉的兑换码也算进「另有 N 件」
     drawn = {item["item_id"] for item in data["items"]}
     stats_excluded = sum(1 for item_id in drawn if not trend.is_comparable(attrs.get(item_id)))
+    groups = digest.compute_stats(s, watch_ids=ids) if len(ids) > 1 else []
     return {
         "mode": data["mode"],
         "from": dto._iso(data["from"]),
@@ -180,7 +227,10 @@ def api_price_trend(watch_ids: str = "", mode: str = "all", tz: int = 480,
         "stats_excluded": stats_excluded,
         "auto_floor": data["auto_floor"],
         "excluded": data["excluded"],
-        "series": [{"t": dto._iso(point["t"]), "min": point["min"],
+        "summary": data["summary"],
+        "seats": seats,
+        "groups": groups,
+        "series": [{"t": dto._iso(point["t"]), "min": point["min"], "p25": point.get("p25"),
                     "median": point["median"], "count": point["count"]}
                    for point in data["series"]],
         "items": [{"item_id": item["item_id"], "title": item["title"],
@@ -188,6 +238,20 @@ def api_price_trend(watch_ids: str = "", mode: str = "all", tz: int = 480,
                               for point in item["points"]]}
                   for item in data["items"]],
     }
+
+
+class DigestIn(BaseModel):
+    watch_ids: list[int] | None = None
+    use_llm: bool = True
+
+
+@app.post("/api/digest")
+def api_digest(body: DigestIn | None = None, s: Session = Depends(get_db)):
+    """生成简短行情日报(先 SQL 统计, 可选调用 LLM 概括趋势与不确定性)。"""
+    settings = runtime.effective_settings(repo.get_config(s))
+    ids = body.watch_ids if body else None
+    use_llm = body.use_llm if body else True
+    return digest.generate_digest(s, settings, watch_ids=ids, use_llm=use_llm)
 
 
 # ---------- config ----------
@@ -202,8 +266,10 @@ def api_put_config(body: dto.ConfigIn, s: Session = Depends(get_db)):
     member = runtime.scope() != runtime.OWNER
     if "default_sort" in fields and fields["default_sort"] not in SORTS:
         raise HTTPException(422, "排序方式无效")
+    if "notify_to" in fields and isinstance(fields["notify_to"], str):
+        fields["notify_to"] = fields["notify_to"].strip()
     if member:
-        for field in ("smtp_host", "smtp_port", "smtp_user", "smtp_pass", "notify_to",
+        for field in ("smtp_host", "smtp_port", "smtp_user", "smtp_pass",
                       "search_url", "favorites_url", "headless"):
             fields.pop(field, None)
         if "review_base_url" in fields:
@@ -211,14 +277,32 @@ def api_put_config(body: dto.ConfigIn, s: Session = Depends(get_db)):
             if url not in runtime.member_review_urls():
                 raise HTTPException(422, "请选择管理员允许的模型接口")
             fields["review_base_url"] = url
-        for field, minimum, maximum in (
-            ("schedule_minutes", 15, 10_080), ("favorites_minutes", 15, 10_080),
-            ("search_max_pages", 1, 10), ("favorites_max_pages", 1, 20),
-            ("liveness_max_checks", 0, 30), ("review_timeout", 1, 120),
-            ("review_max_tokens", 1, 16_000),
-        ):
-            if field in fields and not minimum <= fields[field] <= maximum:
-                raise HTTPException(422, f"{field} 须在 {minimum}–{maximum} 之间")
+
+    # 全员数值范围校验(成员部分上限更严; 错误提示统一用中文字段名)
+    min_interval = 15 if member else 1
+    bounds = (
+        ("schedule_minutes", "推荐抓取间隔", min_interval, 10_080),
+        ("favorites_minutes", "收藏刷新间隔", min_interval, 10_080),
+        ("min_drop_pct", "降价阈值（%）", 0, 100),
+        ("min_drop_abs", "降价阈值（¥）", 0, 1_000_000),
+        ("search_max_pages", "搜索翻页上限", 1, 10),
+        ("favorites_max_pages", "收藏翻页上限", 1, 20),
+        ("liveness_max_checks", "死链核活上限", 0, 30 if member else 100),
+        ("review_timeout", "AI 审核超时", 1, 120 if member else 300),
+        ("review_temperature", "模型温度", 0, 2),
+        ("review_max_tokens", "最大输出 token", 1, 16_000 if member else 32_000),
+        ("action_delay_min", "操作间隔下限", 0, 120),
+        ("action_delay_max", "操作间隔上限", 0, 120),
+        ("smtp_port", "SMTP 端口", 1, 65_535),
+    )
+    for field, label, minimum, maximum in bounds:
+        if field in fields and not minimum <= fields[field] <= maximum:
+            raise HTTPException(422, f"{label}须在 {minimum}–{maximum} 之间")
+    cur_cfg = repo.get_config(s)
+    d_min = fields.get("action_delay_min", cur_cfg.action_delay_min)
+    d_max = fields.get("action_delay_max", cur_cfg.action_delay_max)
+    if d_min > d_max:
+        raise HTTPException(422, "操作间隔下限不能大于上限")
     cfg = repo.update_config(s, **fields)
     try:
         from . import scheduler
@@ -230,13 +314,17 @@ def api_put_config(body: dto.ConfigIn, s: Session = Depends(get_db)):
 
 @app.post("/api/test-email")
 async def api_test_email(s: Session = Depends(get_db)):
-    """用当前(已保存的)配置发一封测试邮件; 返回成功或错误原因。"""
-    if runtime.scope() != runtime.OWNER:
-        raise HTTPException(403, "成员邮箱通知暂未启用")
-    settings = runtime.effective_settings(repo.get_config(s))
+    """用当前(已保存的)配置发一封测试邮件; 成员未填收件邮箱时发往管理员默认邮箱。"""
+    cfg = repo.get_config(s)
+    member = runtime.scope() != runtime.OWNER
+    settings = runtime.effective_settings(cfg)
+    if not (settings.smtp_host and settings.smtp_user and settings.smtp_pass):
+        msg = "站点尚未配置发件邮箱，请联系管理员" if member else "请先配置并保存 SMTP 发件信息"
+        return {"ok": False, "error": msg}
     try:
         await run_in_threadpool(notifier.send_test, settings)
-        return {"ok": True, "to": settings.notify_to}
+        target = (cfg.notify_to or "").strip() if member else (settings.notify_to or settings.smtp_user)
+        return {"ok": True, "to": target or "管理员默认邮箱"}
     except Exception as e:  # noqa: BLE001 - 把失败原因回显给控制台
         return {"ok": False, "error": str(e)}
 
@@ -279,6 +367,31 @@ def api_rereview(s: Session = Depends(get_db)):
     ):
         raise HTTPException(409, "请先配置自己的 AI API Key 和模型接口")
     return service.rereview_pending(s, settings)
+
+
+class ManualFavoriteIn(BaseModel):
+    url_or_id: str
+    title: str | None = None
+    price: float | None = None
+
+
+_ITEM_ID_RE = re.compile(r"(?:[?&]id=|/item/)(\d{8,20})|^\s*(\d{8,20})\s*$")
+
+
+@app.post("/api/favorites/manual")
+def api_manual_favorite(body: ManualFavoriteIn, s: Session = Depends(get_db)):
+    """手动粘贴闲鱼商品链接或商品 ID 加入本地跟踪(后续复检自动同步真实标题与价格)。"""
+    raw = body.url_or_id.strip()
+    m = _ITEM_ID_RE.search(raw)
+    if not m:
+        raise HTTPException(422, "请输入有效的闲鱼商品链接（含 id=数字）或纯数字商品 ID")
+    item_id = m.group(1) or m.group(2)
+    url = f"https://www.goofish.com/item?id={item_id}"
+    title = (body.title or "").strip() or f"手动添加商品 #{item_id}"
+    price = float(body.price) if body.price is not None and body.price >= 0 else 0.0
+    item = Item(item_id=item_id, title=title, url=url, price=price)
+    save_favorite_and_schedule(s, item_id, item=item)
+    return {"ok": True, "item_id": item_id, "url": url}
 
 
 @app.delete("/api/favorites/{item_id}")
@@ -339,11 +452,18 @@ def api_stats(s: Session = Depends(get_db)):
 
 @app.get("/api/events")
 def api_events(s: Session = Depends(get_db)):
-    return [
+    own = [
         {"item_id": e.item_id, "type": e.type, "payload": json.loads(e.payload),
          "created_at": dto._iso(e.created_at)}   # 标 UTC, 前端才能转本地时区(与其它时间一致)
         for e in repo.recent_events(s)
     ]
+    pub = sharing.public_drop_events(limit=30)
+    if not pub:
+        return own
+    seen = {(e["item_id"], e["type"], e["created_at"]) for e in own}
+    merged = own + [e for e in pub if (e["item_id"], e["type"], e["created_at"]) not in seen]
+    merged.sort(key=lambda x: x["created_at"] or "", reverse=True)
+    return merged[:100]
 
 
 # ---------- 扫码登录 ----------
@@ -368,21 +488,24 @@ def api_login_logout():
 # ---------- run + status ----------
 @app.post("/api/run")
 def api_run(watch: str | None = None, s: Session = Depends(get_db)):
-    """watch=None → 全量; watch=条件名 → 只跑该条件。"""
+    """watch=None → 全量; watch=条件名 → 只跑该条件。排入单 worker 队列, 不因他人抓取被跳过。"""
     reason = runtime.search_block_reason(runtime.effective_settings(repo.get_config(s)))
     if reason:
         raise HTTPException(409, reason)
-    if runner.busy():          # 浏览器作业全局串行, 忙的时候明确拒绝而不是静默跳过
-        raise HTTPException(409, "正在抓取中，请稍后")
-    runtime.start_thread(runner.crawl_manual, watch)
-    return {"status": "queued", "scope": watch or "all"}
+    res = runner.enqueue_crawl(watch, manual=True)
+    if res.get("status") == "busy":
+        raise HTTPException(409, "你的抓取正在进行中，请稍后")
+    return res
 
 
 @app.get("/api/status")
 def api_status(s: Session = Depends(get_db)):
     cfg = repo.get_config(s)
+    pos = runner.queue_position()
     return {
         "running": runtime.job_state()["running"],
+        "queued": pos > 0,
+        "queue_position": pos,
         "progress": runtime.job_state().get("progress"),
         "last": runtime.job_state()["last"],
         "paused": cfg.paused,

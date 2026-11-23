@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import FolderLayout from '../components/FolderLayout'
-import { Attrs, Card, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
+import { Attrs, Card, Button, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
 import { yuan, fmtDate, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
 import SnapshotButton from '../components/SnapshotButton'
@@ -18,9 +18,26 @@ export default function Drops({ refreshKey, onToast }) {
   const sortTouched = useRef(false)
   const [cfg, setCfg] = useState(null)
   const [loadError, setLoadError] = useState('')
+  const [manualInput, setManualInput] = useState('')
+  const [addingManual, setAddingManual] = useState(false)
   const { watches, folders, shared, error } = useFolders(refreshKey, visibility)
 
   const load = () => api.favorites().then(setItems).catch((error) => setLoadError(error.message))
+
+  const addManual = async () => {
+    if (addingManual || !manualInput.trim()) return
+    setAddingManual(true)
+    try {
+      await api.addManualFavorite(manualInput.trim())
+      setManualInput('')
+      onToast?.('已加入本地收藏监控，下次复检将同步最新标题与价格')
+      await load()
+    } catch (err) {
+      onToast?.(err.message)
+    } finally {
+      setAddingManual(false)
+    }
+  }
 
   // 本账号默认排序: 加载配置时套用, 用户手动选过就不再覆盖
   useEffect(() => {
@@ -76,6 +93,18 @@ export default function Drops({ refreshKey, onToast }) {
     <section>
       <h1 className="page-title">收藏监控</h1>
       {error && <p role="alert" className="test-err">{error}</p>}
+      <div className="form-row" style={{ marginBottom: 14 }}>
+        <input
+          value={manualInput}
+          onChange={(e) => setManualInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') addManual() }}
+          placeholder="粘贴闲鱼商品链接或商品 ID 加入本地跟踪…"
+          style={{ flex: 1, minWidth: 220 }}
+        />
+        <Button onClick={addManual} disabled={addingManual || !manualInput.trim()}>
+          {addingManual ? '添加中…' : '加入监控'}
+        </Button>
+      </div>
       <FolderLayout folders={<Folders choices={choices} selected={selected?.id} onSelect={setFolderId}
         visibility={visibility} onVisibility={setVisibility} counts={counts} />}>
         <div className="folder-results">
@@ -132,6 +161,7 @@ export default function Drops({ refreshKey, onToast }) {
                   items={[
                     ['上架', ago(it.publish_time)],
                     ['收藏', fmtDate(it.favorited_at)],
+                    ['核对', ago(it.checked_at)],
                     it.dead
                       ? [it.dead_reason === '已售出' ? '售出' : '失效', fmtDate(it.dead_at)]
                       : ['调价', fmtDate(it.price_changed_at)],

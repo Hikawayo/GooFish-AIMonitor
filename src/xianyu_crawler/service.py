@@ -55,7 +55,9 @@ def watchrow_to_watch(w: WatchRow) -> Watch:
         seller_min_credit=w.seller_min_credit,
         requirement=w.requirement,
         kind=w.kind or "general",
+        target_price=w.target_price,
         enabled=w.enabled,
+        archived=bool(w.archived),
     )
 
 
@@ -128,7 +130,7 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
     """
     result = ScanResult()
     for watch_index, w in enumerate(watches):
-        if not w.enabled:
+        if not w.enabled or w.archived:
             continue
         if on_watch is not None:
             on_watch(watch_index, len(watches), w.name)
@@ -147,10 +149,13 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
             watch_scanned += 1
             previous = known.get(item.item_id)
             if previous is not None:
-                # 已失效 / 近期不看 / AI 判过不通过的, 都不必再更新价格、写历史
-                if (repo.is_dead(session, item.item_id) or repo.is_muted(session, item.item_id)
-                        or repo.is_rejected(session, item.item_id)):
+                # 近期不看 / AI 判过不通过的不再更新
+                if repo.is_muted(session, item.item_id) or repo.is_rejected(session, item.item_id):
                     continue
+                if repo.is_dead(session, item.item_id):
+                    if item.dead:
+                        continue
+                    repo.revive_item(session, item.item_id)  # 搜索再次以在售出现 → 恢复在售
                 prev_price = repo.upsert_item_with_price(session, item, source="search")
                 previous.price = item.price
                 previous.observed_at = repo._now()
@@ -169,6 +174,13 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
                             "drop_abs": drop.drop_abs, "drop_pct": drop.drop_pct,
                         })
                         watch_drops += 1
+                # 旧商品降到目标价以下 → 触发去重目标价提醒
+                if (w.target_price is not None and item.price <= w.target_price
+                        and not repo.has_target_price_event(session, item.item_id, w.name, item.price)):
+                    repo.add_event(session, item.item_id, "target_price", {
+                        "title": item.title, "url": item.url, "pic": item.pic_url,
+                        "price": item.price, "target_price": w.target_price, "watch": w.name,
+                    })
                 continue
             if (repo.is_dead(session, item.item_id) or repo.is_muted(session, item.item_id)
                     or (w.id is None and (repo.has_been_recommended(session, item.item_id)
@@ -201,6 +213,12 @@ def scan_recommendations(ctx, session: Session, settings: Settings,
                 repo.add_event(session, item.item_id, "new_recommendation",
                                {"title": item.title, "url": item.url, "price": item.price,
                                 "pic": item.pic_url, "watch": w.name})
+                if (w.target_price is not None and item.price <= w.target_price
+                        and not repo.has_target_price_event(session, item.item_id, w.name, item.price)):
+                    repo.add_event(session, item.item_id, "target_price", {
+                        "title": item.title, "url": item.url, "pic": item.pic_url,
+                        "price": item.price, "target_price": w.target_price, "watch": w.name,
+                    })
         if watch_raw == 0 and w.enabled:
             # 一条都没搜到而这条条件本来是有结果的 → 多半被风控或页面异常, 必须让用户看见
             result.warning = f"「{w.name}」一条都没搜到，可能被风控或列表没加载出来"

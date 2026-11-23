@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import threading
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -15,12 +15,27 @@ _ENGINES: dict[str, Engine] = {}  # 复用连接池: 每请求新建 engine 会�
 _LOCK = threading.Lock()
 
 
+def _configure_sqlite(engine: Engine) -> None:
+    @event.listens_for(engine, "connect")
+    def _set_pragmas(dbapi_conn, _conn_record):
+        cur = dbapi_conn.cursor()
+        try:
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=5000")
+            cur.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cur.close()
+
+
 def _engine(url: str) -> Engine:
-    engine = _ENGINES.get(url)
-    if engine is None:
-        engine = create_engine(url, future=True)
-        _ENGINES[url] = engine
-    return engine
+    with _LOCK:
+        engine = _ENGINES.get(url)
+        if engine is None:
+            engine = create_engine(url, future=True)
+            if url.startswith("sqlite:///"):
+                _configure_sqlite(engine)
+            _ENGINES[url] = engine
+        return engine
 
 
 def make_session(url: str, create: bool = False) -> Session:

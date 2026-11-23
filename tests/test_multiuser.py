@@ -161,3 +161,119 @@ def test_same_item_can_be_reviewed_in_two_folders_and_refresh_price(tmp_path, mo
     assert first_match is not None and first_match.price == 80
     assert second_match is not None and second_match.price == 100
     db.close()
+
+
+def test_member_mail_fallback_default_manual_and_autoshcedule(tmp_path, monkeypatch):
+    """成员邮件未填时回退管理员邮箱、自填用自己；新成员默认人工审核；建条件自动排定时。"""
+    from xianyu_crawler import notifier
+    from xianyu_crawler.web import scheduler
+
+    key = b"local-test-goofish-key-more-than-32-bytes"
+    owner_email = "owner@example.test"
+    member_email = "friend@example.test"
+    owner_scope = hashlib.sha256(owner_email.encode()).hexdigest()
+    member_scope = hashlib.sha256(member_email.encode()).hexdigest()
+    monkeypatch.setenv("XIANYU_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XIANYU_SSO_ENABLED", "true")
+    monkeypatch.setenv("XIANYU_SSO_OWNER_SCOPE", owner_scope)
+    monkeypatch.setattr(runtime, "DB_URL", f"sqlite:///{tmp_path / 'xianyu.db'}")
+    (tmp_path / "sso.key").write_bytes(key)
+
+    def auth(email: str) -> dict[str, str]:
+        payload = base64.urlsafe_b64encode(
+            json.dumps({"e": email, "aud": "goofish", "exp": time.time() + 60}).encode()
+        ).decode().rstrip("=")
+        sig = base64.urlsafe_b64encode(hmac.digest(key, payload.encode(), "sha256")).decode().rstrip("=")
+        return {"sso": f"{payload}.{sig}"}
+
+    sent: list[str | None] = []
+    monkeypatch.setattr(notifier, "send_test", lambda s: sent.append(s.notify_to))
+
+    with TestClient(app, cookies=auth(owner_email)) as owner, TestClient(
+        app, cookies=auth(member_email)
+    ) as member:
+        owner.put("/api/config", json={
+            "smtp_host": "smtp.example.test", "smtp_port": 465,
+            "smtp_user": "bot@example.test", "smtp_pass": "secret-pass",
+            "notify_to": "admin-inbox@example.test",
+        })
+        # 新成员首次建库默认关闭 AI 审核, 扫码后即可搜索
+        cfg_out = member.get("/api/config").json()
+        assert cfg_out["review_enabled"] is False
+        assert "secret-pass" not in json.dumps(cfg_out)
+        assert cfg_out["smtp_host"] is None
+
+        # 成员未填收件邮箱时发测试邮件 → 用管理员邮箱发, 响应不泄露管理员地址
+        r1 = member.post("/api/test-email").json()
+        assert r1 == {"ok": True, "to": "管理员默认邮箱"}
+        assert sent[-1] == "admin-inbox@example.test"
+
+        # 成员填写自己的收件邮箱 → 改发本人邮箱
+        member.put("/api/config", json={"notify_to": "friend-inbox@example.test"})
+        r2 = member.post("/api/test-email").json()
+        assert r2 == {"ok": True, "to": "friend-inbox@example.test"}
+        assert sent[-1] == "friend-inbox@example.test"
+
+        # 建条件后自动注册该成员的定时任务
+        scheduler.start(120, 30)
+        try:
+            assert member.post("/api/watches", json={"name": "新成员条件"}).status_code == 200
+            sched = scheduler._scheduler  # noqa: SLF001
+            assert sched is not None
+            assert sched.get_job(f"{member_scope}:crawl") is not None
+            assert sched.get_job(f"{member_scope}:favorites") is not None
+        finally:
+            scheduler.shutdown()
+
+
+def test_queue_runs_multiple_scopes_without_skip_and_login_expired_flag(tmp_path, monkeypatch):
+    """多用户入队串行执行不跳过, 登录过期标记正确反映在 has_login 和 /api/login/status。"""
+    from xianyu_crawler.web import login_runner
+
+    monkeypatch.setenv("XIANYU_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XIANYU_SSO_ENABLED", "true")
+    scope_a = "a" * 64
+    scope_b = "b" * 64
+    started_a = threading.Event()
+    release_a = threading.Event()
+    order: list[str] = []
+    done_b = threading.Event()
+
+    def fake_crawl(_watch=None):
+        sc = runtime.scope()
+        order.append(sc)
+        if sc == scope_a:
+            started_a.set()
+            release_a.wait(5)
+        else:
+            done_b.set()
+        return {"ok": True}
+
+    monkeypatch.setattr(runner, "crawl", fake_crawl)
+
+    with runtime.use_scope(scope_a):
+        res_a = runner.enqueue_crawl()
+        assert res_a["status"] == "queued"
+    assert started_a.wait(5)
+
+    # A 正在抓时, B 入队排队而不被跳过, 且扫码独立锁空闲
+    with runtime.use_scope(scope_b):
+        res_b = runner.enqueue_crawl()
+        assert res_b["status"] == "queued"
+        assert runner.queue_position(scope_b) >= 1
+        assert login_runner._LOGIN_LOCK.locked() is False  # noqa: SLF001
+    release_a.set()
+    assert done_b.wait(5)
+    assert order == [scope_a, scope_b]
+
+    # 闲鱼登录过期标记生效
+    with runtime.use_scope(scope_a):
+        runtime.data_dir().mkdir(parents=True, exist_ok=True)
+        (runtime.data_dir() / "storage_state.json").write_text('{"cookies":[]}')
+        assert runtime.has_login() is True
+        runtime.mark_login_expired("测试过期")
+        assert runtime.has_login() is False
+        st = login_runner.status()
+        assert st["has_state"] is False and st["expired"] is True
+        runtime.clear_login_expired()
+        assert runtime.has_login() is True

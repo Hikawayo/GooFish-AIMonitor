@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+import time
 
 from datetime import datetime
 
@@ -12,7 +14,17 @@ from . import dto, runtime
 from ..models import Item
 from ..review import REVIEW_NOT_RUN
 from ..storage import repo
-from ..storage.orm import ItemRow, PublishedPrice, WatchFolder, WatchMatch, WatchRow
+from ..storage.orm import Event, ItemRow, PublishedPrice, WatchFolder, WatchMatch, WatchRow
+
+_CACHE_TTL_S = 10.0
+_CACHE_LOCK = threading.Lock()
+_CATALOG_CACHE: dict[str, tuple[float, list[dict]]] = {}
+
+
+def invalidate() -> None:
+    """公开条件/文件夹变更或抓取结束后清缓存。"""
+    with _CACHE_LOCK:
+        _CATALOG_CACHE.clear()
 
 
 def folder_key(user_scope: str, watch: WatchRow) -> str:
@@ -35,6 +47,11 @@ def _visible_matches(watch_ids):
 
 def catalog() -> list[dict]:
     caller = runtime.scope()
+    now = time.monotonic()
+    with _CACHE_LOCK:
+        hit = _CATALOG_CACHE.get(caller)
+        if hit is not None and now - hit[0] < _CACHE_TTL_S:
+            return hit[1]
     folders: dict[str, dict] = {}
     scopes = runtime.scopes() if runtime.shared_mode() else [caller]
     for user_scope in scopes:
@@ -67,7 +84,51 @@ def catalog() -> list[dict]:
                     # 席种等属性由挂牌文字推出, 公开行情一并展示
                     "attrs": json.loads(item.attrs) if item.attrs else None,
                 })
-    return [dict(folder, items=list(folder["items"].values())) for folder in folders.values()]
+    result = [dict(folder, items=list(folder["items"].values())) for folder in folders.values()]
+    with _CACHE_LOCK:
+        _CATALOG_CACHE[caller] = (time.monotonic(), result)
+    return result
+
+
+def public_drop_events(limit: int = 30) -> list[dict]:
+    """收集公开组内已可见商品的降价事件(排除当前用户自己的库, 避免与本人事件重复)。"""
+    if not runtime.shared_mode():
+        return []
+    caller = runtime.scope()
+    out: list[dict] = []
+    for user_scope in runtime.scopes():
+        if user_scope == caller:
+            continue
+        with runtime.use_scope(user_scope), runtime.session() as db:
+            pub_ids = list(db.scalars(select(WatchRow.id).where(WatchRow.public.is_(True))))
+            if not pub_ids:
+                continue
+            visible_item_ids = {row[1].item_id for row in db.execute(_visible_matches(pub_ids))}
+            if not visible_item_ids:
+                continue
+            evs = db.scalars(
+                select(Event)
+                .where(Event.type == "price_drop", Event.item_id.in_(visible_item_ids))
+                .order_by(Event.created_at.desc())
+                .limit(limit)
+            )
+            for e in evs:
+                payload = json.loads(e.payload)
+                out.append({
+                    "item_id": e.item_id,
+                    "type": e.type,
+                    "payload": {
+                        "title": payload.get("title"),
+                        "url": payload.get("url"),
+                        "prev_price": payload.get("prev_price"),
+                        "curr_price": payload.get("curr_price"),
+                        "drop_abs": payload.get("drop_abs"),
+                        "public": True,
+                    },
+                    "created_at": dto._iso(e.created_at),
+                })
+    out.sort(key=lambda x: x["created_at"] or "", reverse=True)
+    return out[:limit]
 
 
 def price_history(key: str, item_id: str) -> list[dict] | None:

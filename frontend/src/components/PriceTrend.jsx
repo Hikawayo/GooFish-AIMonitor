@@ -201,9 +201,12 @@ function chartColors() {
 export default function PriceTrend({ watches, refreshKey }) {
   const colors = chartColors()
   const [mode, setMode] = useState('all')
+  const [seat, setSeat] = useState('')
   const [open, setOpen] = useState(() => localStorage.getItem('xy-trend') !== '0')
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  const [digest, setDigest] = useState(null)
+  const [digestBusy, setDigestBusy] = useState(false)
   const [hover, setHover] = useState(null)
   const [view, setView] = useState(null)
   const [width, setWidth] = useState(680)
@@ -211,12 +214,17 @@ export default function PriceTrend({ watches, refreshKey }) {
   const key = (watches || []).join(',')
 
   useEffect(() => {
+    setSeat('')
+    setDigest(null)
+  }, [key])
+
+  useEffect(() => {
     if (!key) {
       setData(null)
       return
     }
     let active = true
-    api.priceTrend(key, mode, -new Date().getTimezoneOffset())
+    api.priceTrend(key, mode, -new Date().getTimezoneOffset(), undefined, seat || undefined)
       .then((result) => {
         if (!active) return
         setData(result)
@@ -224,7 +232,20 @@ export default function PriceTrend({ watches, refreshKey }) {
       })
       .catch((err) => { if (active) setError(err.message) })
     return () => { active = false }
-  }, [key, mode, refreshKey])
+  }, [key, mode, seat, refreshKey])
+
+  const loadDigest = async () => {
+    if (digestBusy) return
+    setDigestBusy(true)
+    try {
+      const res = await api.digest(watches)
+      setDigest(res)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDigestBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!open || !box.current) return
@@ -288,6 +309,17 @@ export default function PriceTrend({ watches, refreshKey }) {
               onClick={() => setMode(value)}>{label}</button>
           ))}
         </div>
+        {data?.seats?.length > 0 && (
+          <div className="trend-modes" role="group" aria-label="席种筛选">
+            <button type="button" aria-pressed={!seat} onClick={() => setSeat('')}>全部席种</button>
+            {data.seats.map((s) => (
+              <button key={s} type="button" aria-pressed={seat === s} onClick={() => setSeat(s)}>{s}</button>
+            ))}
+          </div>
+        )}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={loadDigest} disabled={digestBusy}>
+          {digestBusy ? '生成中…' : '趋势简报'}
+        </button>
         <button type="button" className="trend-toggle" onClick={toggle}
           aria-expanded={open} aria-label={open ? '收起价格总览' : '展开价格总览'}>
           <i className={'ti ' + (open ? 'ti-chevron-up' : 'ti-chevron-down')} />
@@ -295,6 +327,12 @@ export default function PriceTrend({ watches, refreshKey }) {
       </div>
 
       {error && <p role="alert" className="test-err">{error}</p>}
+      {digest && (
+        <div className="trend-note" style={{ marginBottom: 10 }}>
+          {digest.summary}
+          {digest.warn && <span className="test-err">（{digest.warn}）</span>}
+        </div>
+      )}
 
       {open && (data === null
         ? <div className="trend-empty">加载中…</div>
@@ -308,13 +346,18 @@ export default function PriceTrend({ watches, refreshKey }) {
               <div className="trend-readout">
                 {active
                   ? <>
-                    {fmtDateTime(active.t)} · 最低 {yuan(active.min)} · 中位 {yuan(active.median)} · {active.count} 件在售
+                    {fmtDateTime(active.t)} · 最低 {yuan(active.min)}
+                    {active.p25 != null ? ` · P25 ${yuan(active.p25)}` : ''}
+                    {' · '}中位 {yuan(active.median)} · {active.count} 件在售
                   </>
                   : null}
                 <span className="trend-sum">
                   {peak ? `最高 ${yuan(peak)} → 现 ${yuan(last.min)}` : ''}
                   {change === 0 ? '（持平）' : `（${change > 0 ? '+' : '−'}${Math.abs(change)}%）`}
                   {' · '}共 {data.items_total} 件
+                  {(data.summary?.dropped > 0 || data.summary?.raised > 0) && (
+                    `（降 ${data.summary.dropped} / 涨 ${data.summary.raised}）`
+                  )}
                 </span>
               </div>
               <div ref={box}>
@@ -326,6 +369,11 @@ export default function PriceTrend({ watches, refreshKey }) {
                 <span><i className="trend-key-median" />中位数</span>
                 <span><i className="trend-key-item" />每件商品</span>
               </div>
+              {data.groups?.length > 1 && (
+                <div className="trend-note">
+                  跨组对比：{data.groups.map((g) => `${g.name} 最低 ${yuan(g.min)} / 中位 ${yuan(g.median)}（${g.count}件）`).join(' · ')}
+                </div>
+              )}
               {data.stats_excluded > 0 && (
                 <div className="trend-note">另 {data.stats_excluded} 件捆绑/定金未计入最低价与中位数</div>
               )}

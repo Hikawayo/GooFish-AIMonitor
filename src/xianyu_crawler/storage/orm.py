@@ -99,6 +99,8 @@ class WatchRow(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     public: Mapped[bool] = mapped_column(Boolean, default=False)
     folder_id: Mapped[Optional[int]] = mapped_column(ForeignKey("watch_folders.id"))
+    target_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 目标价提醒阈值
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)               # 已归档(不抓取, 保留历史)
 
 
 class WatchMatch(Base):
@@ -163,3 +165,4 @@ class AppConfig(Base):
     notify_on_sold: Mapped[bool] = mapped_column(Boolean, default=True)       # 已售出·下架
     notify_on_favorite: Mapped[bool] = mapped_column(Boolean, default=True)   # 自动收藏成功
     notify_on_login: Mapped[bool] = mapped_column(Boolean, default=True)      # 登录失效
+    login_alert_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # 登录失效邮件去重

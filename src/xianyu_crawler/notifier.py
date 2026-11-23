@@ -13,11 +13,14 @@ CSV_FIELDS = ["type", "title", "url", "reason", "prev_price", "curr_price", "dro
 
 def format_email(events: list[dict]) -> tuple[str, str]:
     news = [e for e in events if e["type"] == "new_recommendation"]
+    targets = [e for e in events if e["type"] == "target_price"]
     drops = [e for e in events if e["type"] == "price_drop"]
     solds = [e for e in events if e["type"] == "sold"]
     favs = [e for e in events if e["type"] == "favorited"]
 
     bits = []
+    if targets:
+        bits.append(f"{len(targets)} 命中目标价")
     if news:
         bits.append(f"{len(news)} 新发现")
     if drops:
@@ -29,6 +32,11 @@ def format_email(events: list[dict]) -> tuple[str, str]:
     subject = "闲鱼: " + (" / ".join(bits) if bits else "有新动静")
 
     lines: list[str] = []
+    if targets:
+        lines.append("== 命中目标价 ==")
+        for e in targets:
+            tail = f"  ({e['watch']})" if e.get("watch") else ""
+            lines.append(f"- {e['title']}: ¥{e.get('price')} (目标 ≤ ¥{e.get('target_price')}){tail}  {e['url']}")
     if news:
         lines.append("== 新发现 ==")
         for e in news:
@@ -104,12 +112,14 @@ def _card(e: dict, badge: str = "") -> str:
 
 def format_email_html(events: list[dict]) -> str:
     news = [e for e in events if e["type"] == "new_recommendation"]
+    targets = [e for e in events if e["type"] == "target_price"]
     drops = [e for e in events if e["type"] == "price_drop"]
     solds = [e for e in events if e["type"] == "sold"]
     favs = [e for e in events if e["type"] == "favorited"]
 
     bits = []
-    for n, lab in ((len(news), "新发现"), (len(drops), "降价"), (len(solds), "售出"), (len(favs), "收藏")):
+    for n, lab in ((len(targets), "命中目标价"), (len(news), "新发现"), (len(drops), "降价"),
+                   (len(solds), "售出"), (len(favs), "收藏")):
         if n:
             bits.append(f"{n} {lab}")
     summary = " · ".join(bits) if bits else "有新动静"
@@ -120,6 +130,11 @@ def format_email_html(events: list[dict]) -> str:
         head = (f'<div style="font-size:13px;font-weight:700;color:#697386;'
                 f'margin:18px 2px 9px;">{title}（{len(items)}）</div>')
         return head + "".join(_card(e, badge_fn(e)) for e in items)
+
+    def b_target(e):
+        w = (f'<span style="font-size:12px;color:#697386;">　条件 {_esc(e.get("watch"))}</span>'
+             if e.get("watch") else "")
+        return _badge(f"目标 ≤ {_yuan(e.get('target_price'))}", "#d4380d", "#fff1ec") + w
 
     def b_new(e):
         w = (f'<span style="font-size:12px;color:#697386;">　条件 {_esc(e.get("watch"))}</span>'
@@ -133,7 +148,8 @@ def format_email_html(events: list[dict]) -> str:
                 if e.get("prev_price") is not None else "")
         return _badge(txt, "#d4380d", "#fff1ec") + tail
 
-    body = (section("🆕 新发现", news, b_new)
+    body = (section("🎯 命中目标价", targets, b_target)
+            + section("🆕 新发现", news, b_new)
             + section("📉 降价", drops, b_drop)
             + section("⚠️ 已售出 / 下架", solds, lambda e: _badge(e.get("reason") or "已下架", "#697386", "#eef1f5"))
             + section("⭐ 新收藏", favs, lambda e: ""))

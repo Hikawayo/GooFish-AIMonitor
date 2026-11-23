@@ -70,9 +70,10 @@ def upsert_item_with_price(s: Session, item: Item, source: str,
     if item.original_price and item.original_price > (row.original_price or 0) \
             and item.original_price > item.price:
         row.original_price = item.original_price      # 平台给的最初挂牌价(详情精确值优先)
-    # 首次入库时若知道「卖家最初挂牌价 + 发布时间」, 先补这个起点, 走势才不会从半路开始
+    # 价格未变时不重复写 PriceHistory(最近观测时间已记在 ItemRow.last_seen_at), 避免表无限膨胀
     observed = row.promo_price if (row.promo_price and row.promo_price < item.price) else item.price
-    s.add(PriceHistory(item_id=item.item_id, price=observed))
+    if created or prev is None or observed != prev:
+        s.add(PriceHistory(item_id=item.item_id, price=observed))
     s.commit()
     if (item.original_price and item.publish_time and item.original_price > item.price):
         seed_original_price(s, item.item_id, item.original_price, item.publish_time)
@@ -271,6 +272,18 @@ def is_dead(s: Session, item_id: str) -> bool:
     return bool(row and row.dead)
 
 
+def revive_item(s: Session, item_id: str) -> bool:
+    """已下架商品重新在搜索中以在售状态出现时, 恢复在售。"""
+    row = s.get(ItemRow, item_id)
+    if row is None or not row.dead:
+        return False
+    row.dead = False
+    row.dead_reason = None
+    row.dead_at = None
+    s.commit()
+    return True
+
+
 def mark_dead(s: Session, item_id: str, reason: str) -> None:
     row = s.get(ItemRow, item_id)
     if row is None or row.dead:
@@ -327,14 +340,45 @@ def add_event(s: Session, item_id: str, type_: str, payload: dict) -> None:
     s.commit()
 
 
+def prune_old_events(s: Session, keep: int = 500) -> int:
+    """只保留最近 keep 条已通知事件, 避免 events 表无限膨胀。"""
+    ids = list(s.scalars(
+        select(Event.id).where(Event.notified.is_(True))
+        .order_by(Event.created_at.desc(), Event.id.desc())
+        .offset(keep)
+    ))
+    if not ids:
+        return 0
+    s.execute(delete(Event).where(Event.id.in_(ids)))
+    s.commit()
+    return len(ids)
+
+
+def has_target_price_event(s: Session, item_id: str, watch_name: str, price: float,
+                           hours: int = 24) -> bool:
+    """同一商品在同一条件下最近是否已因不高于当前价命中过目标价提醒。"""
+    cutoff = _now() - timedelta(hours=hours)
+    rows = s.scalars(select(Event).where(Event.item_id == item_id, Event.type == "target_price",
+                                         Event.created_at >= cutoff))
+    for event in rows:
+        try:
+            payload = json.loads(event.payload)
+            if payload.get("watch") == watch_name and float(payload.get("price")) <= float(price):
+                return True
+        except (ValueError, TypeError):
+            continue
+    return False
+
+
 def has_drop_event_at_price(s: Session, item_id: str, price: float, minutes: int = 180) -> bool:
-    """最近是否已经因为「跌到这个价」记过降价事件, 避免搜索和收藏复检重复记一条。"""
+    """最近是否已经通知过不高于当前价的降价事件(低于上次通知价才再发)。"""
     cutoff = _now() - timedelta(minutes=minutes)
     rows = s.scalars(select(Event).where(Event.item_id == item_id, Event.type == "price_drop",
                                          Event.created_at >= cutoff))
     for event in rows:
         try:
-            if float(json.loads(event.payload).get("curr_price")) == float(price):
+            prev_notified = float(json.loads(event.payload).get("curr_price"))
+            if prev_notified <= float(price):
                 return True
         except (ValueError, TypeError):
             continue

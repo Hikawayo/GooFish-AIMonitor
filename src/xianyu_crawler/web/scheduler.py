@@ -14,14 +14,15 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from . import runner, runtime
-from ..storage import repo
+from ..config import Settings
+from ..storage import backup, repo
 
 _scheduler: BackgroundScheduler | None = None
 
 
 def _run_for_scope(user_scope: str, favorites: bool) -> None:
     with runtime.use_scope(user_scope):
-        (runner.refresh_favorites if favorites else runner.crawl)()
+        (runner.enqueue_favorites if favorites else runner.enqueue_crawl)()
 
 
 def start(crawl_minutes: int, favorites_minutes: int) -> None:
@@ -36,6 +37,12 @@ def start(crawl_minutes: int, favorites_minutes: int) -> None:
                 with runtime.use_scope(user_scope), runtime.session() as db:
                     cfg = repo.get_config(db)
                     reschedule(cfg.schedule_minutes, cfg.favorites_minutes)
+    # 每日一次 SQLite 在线备份(滚动保留最近 7 份)
+    _scheduler.add_job(
+        lambda: backup.backup_all_scopes(Settings().data_dir.resolve()),
+        IntervalTrigger(hours=24), id="system:backup",
+        max_instances=1, coalesce=True, replace_existing=True,
+    )
     _scheduler.start()
 
 
@@ -63,7 +70,10 @@ def delay_after_manual(include_favorites: bool = True) -> None:
 
 
 def ensure_scheduled(crawl_minutes: int, favorites_minutes: int) -> None:
-    if _scheduler is not None and _scheduler.get_job(f"{runtime.scope()}:favorites") is None:
+    if _scheduler is None:
+        return
+    scope = runtime.scope()
+    if _scheduler.get_job(f"{scope}:crawl") is None or _scheduler.get_job(f"{scope}:favorites") is None:
         reschedule(crawl_minutes, favorites_minutes)
 
 

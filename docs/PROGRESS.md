@@ -280,14 +280,38 @@
 - **走势查看**：`PriceHistory.jsx` 从 `/api/items/{id}/prices` 或公开接口取观测，画线并列出逐条时间与价格；本地收藏由 `refresh_local_favorites` 每轮复检累积观测点，因此几天后打开就有曲线。
 - **验收**：种两条测试商品到本地冒烟库（4 个观测点跨 5 天）验证弹窗；线上容器用 `docker exec` 核对代码与产物，未触发真实采集。
 
+## 2026-11-24 阶段二·五 P0 + P1 可靠性收口 + 成员邮件通知
+
+- **成员邮件通知**：采用管理员 SMTP 代发；成员未填收件邮箱时自动回退到管理员默认邮箱，也可在设置页自行填写收件邮箱并点「发送测试邮件」（`runtime._owner_mail_settings` / `effective_settings`、`app.py` 放开成员 `notify_to` 与 `/api/test-email`、`Settings.jsx` 对成员展示收件邮箱与事件开关，不暴露管理员 SMTP 凭据与默认邮箱明文）。
+- **P0（任务队列 + 扫码解耦 + 单轮超时 + 登录失效可见 + 新成员默认可搜）**：
+  - `runner.py` 改为单 worker 队列（按 `(scope, kind, watch_name)` 去重入队），定时与手动统一入队不再互相跳过；`busy()` / `queue_position()` 按本人 scope 计算；新增单轮总时长上限 `crawl_timeout_seconds`（默认 600s，`config.py`）。
+  - `login_runner.py` 改用独立 `_LOGIN_LOCK`（超时 90s），不再占用抓取锁或改写 `job_state()["running"]`。
+  - `scheduler.py` 定时触发改为入队，`ensure_scheduled` 同时检查 `crawl` 和 `favorites`；`app.py` `POST /api/watches` 建条件后自动排程。
+  - `api.js` 在 `.json()` 前拦截 401 与非 JSON（HTML 登录重定向）并触发 `onAuthExpired`；`App.jsx` 展示不可忽略的「登录已过期」横幅与刷新入口，区分断网提示与排队状态。
+  - `runtime.py` 增加 `login_expired.flag` 持久化失效标记；`runner.py`（含 `refresh_favorites`）捕获 `SessionExpired` 写标记与 `last`；顶栏、侧栏红点、主区横幅与设置页同步提示重新扫码。
+  - `runtime.session()` 在新成员首次建库时默认关掉 `review_enabled`（人工审核，扫码即搜）；`Recommendations.jsx` 空状态按过期/未登录/无条件给出直达按钮。
+- **P1 + P2 轻项（数据卫生 + 校验 + 防重 + 文件夹管理）**：
+  - `storage/db.py`：SQLite 开启 `WAL`、`busy_timeout=5000`、`synchronous=NORMAL`，`_ENGINES` 访问加锁。
+  - `storage/orm.py` + `migrate.py` + `runner.py`：`AppConfig.login_alert_sent_at` 给登录失效邮件去重（恢复登录后重置）；`_notify` 改为发信成功后再写 CSV 并 `mark_notified`，顺手调 `prune_old_events(keep=500)` 清理旧事件。
+  - `storage/repo.py`：`upsert_item_with_price` 价格未变不再重复写 `PriceHistory`；`has_drop_event_at_price` 改为「低于上次通知价才再发」。
+  - `app.py`：全员配置数值范围校验 + `action_delay_min <= action_delay_max`（中文字段名报错）；新增 `PUT`/`DELETE /api/watch-folders/{fid}`（删除时关联条件 `folder_id` 置空）。
+  - `dto.py` + `Drops.jsx`：收藏卡片显示「最近核对时间」（`checked_at`）。
+  - `Recommendations.jsx` / `Settings.jsx` / `Watches.jsx` / `App.jsx`：补齐 `loadError` + 重试、数值输入非空校验、按钮防双击、删除条件/文件夹确认弹窗与全链路 `catch`。
+- **阶段二剩余 + 阶段三（功能全量收口）**：
+  - **目标价提醒**：`WatchRow.target_price`（已登记迁移）+ `service.scan_recommendations` 新/旧商品价格 ≤ 目标价写入去重 `target_price` 事件 + `notifier.py` 邮件卡片 + `App.jsx` 事件流 + `Watches.jsx` 配置。
+  - **手动粘贴链接加监控**：`POST /api/favorites/manual` 解析闲鱼商品链接或纯数字 ID 加入本地跟踪并排定时，`Drops.jsx` 顶部新增输入框。
+  - **公开页缓存、最低挂牌汇总与公开组降价**：`sharing.py` 增加 10s 短 TTL 缓存与 `invalidate()`，新增 `public_drop_events()` 合并进 `/api/events`；`Recommendations.jsx` 公开页顶部展示在售数与最低挂牌价。
+  - **下架恢复、P25/增降涨、席种筛选、跨组对比、归档、趋势简报与每日备份**：
+    - `repo.revive_item`：已下架商品重新以在售出现在搜索结果中时自动恢复在售。
+    - `trend.py` + `/api/price-trend` + `PriceTrend.jsx`：补齐 P25 分位、降/涨件数、按席种筛选和同文件夹多条件跨组对比。
+    - `WatchRow.archived`（已登记迁移）：支持条件归档/恢复，归档后不抓取但保留历史走势。
+    - `digest.py` + `POST /api/digest`：SQL 先统计，再可选调用兼容 LLM 生成 3–5 句简短趋势简报（不编造交易量/预测百分比），`PriceTrend.jsx` 提供「趋势简报」按钮。
+    - `storage/backup.py` + `scheduler.py`：每日一次 SQLite 在线备份，滚动保留最近 7 份。
+- **验证**：`pwsh -File scripts/verify.ps1 -Frontend` 通过（`verify: ? passed | pyright 0 errors | build ok`），新增 `tests/test_multiuser.py` 与 `tests/test_api.py` 回归测试。**未验证**：需等推送后服务器自动更新完成，再用全新 SSO 账号按「阶段二·五 · 验收」在手机端实测一遍。
+
 ## 下一步
 
-2026-11-24 做了一次快速体检，问题清单和验收标准写进了 [DEVELOPMENT_PLAN.md「阶段二·五」](DEVELOPMENT_PLAN.md)。按下面的顺序做：
+计划内代码（阶段二 + 阶段二·五 P0/P1/P2 + 阶段三）已全部落地并提交推送至 `origin/main`（服务器 `xy-autoupdate.timer` 约 2 分钟后自动上线）：
 
-1. **第一件事**：浏览器任务改成排队（runner `_LOCK` 抢不到锁直接 skipped、扫码占锁、新成员建条件后不排定时）。这三项是同一处改动，放在一起做。
-2. 处理登录失效：SSO 401 要统一提示；闲鱼登录过期后顶栏要变红、给出提示，refresh_favorites 也要处理过期；新成员默认关掉 AI 审核。
-3. P1：加载失败的错误态、设置数值校验、按钮防重复和失败提示、价格不变时不写历史、SQLite WAL、文件夹改名和删除。
-4. 用新 SSO 账号按「阶段二·五 · 验收」走一遍，然后再做目标价提醒。
-5. 待用户决定：成员的邮件通知怎么做（用管理员的 SMTP 代发，还是只做站内提醒）。
-
-旧清单里的「收藏页没有取消收藏」已经做了（`DELETE /api/favorites/{id}`）。其余小项已并入阶段二·五的 P2。
+1. **第一件事（真机验收）**：用全新 SSO 账号在手机上按 [DEVELOPMENT_PLAN.md「阶段二·五 · 验收」](DEVELOPMENT_PLAN.md) 走一遍完整闭环（首屏公开组 → 扫码 → 建条件/目标价 → 自动抓取 → 手贴/站内收藏 → 降价事件 + 并发/过期/断网提示）。
+2. **可选清理**：仓库根目录遗留的未跟踪图片 `1000078740.jpg` 可自行删除。

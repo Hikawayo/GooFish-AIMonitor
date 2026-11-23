@@ -43,7 +43,9 @@ class Watch(BaseModel):
     want_max_per_run: int = 5
     requirement: str | None = None      # 自然语言要求, 供 LLM 二次审核
     kind: str = "general"               # 模板: general(通用) / ticket(票务) — 只影响抽取与统计口径
+    target_price: float | None = None   # 目标价提醒阈值(价格 ≤ 该值触发提醒)
     enabled: bool = True
+    archived: bool = False              # 已归档: 不参与抓取, 保留历史走势可查
 
 
 def load_watchlist(path: str | Path) -> list[Watch]:
@@ -83,6 +85,8 @@ class Settings(BaseSettings):
     review_system_prompt: str = DEFAULT_REVIEW_SYSTEM_PROMPT
     # 死链探测: 每轮最多对多少条待审推荐打开详情页核活(防止单轮太久)
     liveness_max_checks: int = 30
+    # 单轮抓取总时长上限(秒), 超时提前结束避免占死队列
+    crawl_timeout_seconds: int = 600
     # 密钥(系统环境变量): XIANYU_SMTP_HOST/PORT/USER/PASS, XIANYU_NOTIFY_TO
     smtp_host: str | None = None
     smtp_port: int = 465

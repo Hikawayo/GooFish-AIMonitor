@@ -26,7 +26,9 @@ class WatchIn(BaseModel):
     seller_min_credit: int | None = None
     requirement: str | None = None
     kind: str = "general"               # 模板: general(通用) / ticket(票务)
+    target_price: float | None = None
     enabled: bool = True
+    archived: bool = False
     public: bool = False
     folder_id: int | None = None
 
@@ -170,6 +172,7 @@ class FavoriteOut(BaseModel):
     publish_time: str | None = None
     first_seen_at: str | None = None
     price_changed_at: str | None = None
+    checked_at: str | None = None         # 最近核对/观测时间
 
 
 class WatchMatchOut(BaseModel):
@@ -197,7 +200,9 @@ def watchin_to_fields(b: WatchIn) -> dict:
         "seller_min_credit": b.seller_min_credit,
         "requirement": b.requirement,
         "kind": b.kind,
+        "target_price": b.target_price,
         "enabled": b.enabled,
+        "archived": b.archived,
         "public": b.public,
         "folder_id": b.folder_id,
     }
@@ -216,7 +221,9 @@ def watchrow_to_out(w: WatchRow) -> WatchOut:
         seller_min_credit=w.seller_min_credit,
         requirement=w.requirement,
         kind=w.kind or "general",
+        target_price=w.target_price,
         enabled=w.enabled,
+        archived=bool(w.archived),
         public=w.public,
         folder_id=w.folder_id,
     )
@@ -289,4 +296,5 @@ def itemrow_to_fav(r: ItemRow) -> FavoriteOut:
         pic_url=r.pic_url, dead=r.dead, dead_reason=r.dead_reason, dead_at=_iso(r.dead_at),
         publish_time=_iso(r.publish_time), first_seen_at=_iso(r.first_seen_at),
         price_changed_at=_iso(r.price_changed_at),
+        checked_at=_iso(r.detail_checked_at or r.last_seen_at),
     )

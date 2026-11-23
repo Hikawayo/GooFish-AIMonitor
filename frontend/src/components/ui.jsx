@@ -47,11 +47,12 @@ export function Spinner() {
   )
 }
 
-export function EmptyState({ title, sub }) {
+export function EmptyState({ title, sub, action }) {
   return (
     <div className="empty">
       <div className="empty-title">{title}</div>
       {sub && <div className="empty-sub">{sub}</div>}
+      {action && <div style={{ marginTop: 12 }}>{action}</div>}
     </div>
   )
 }

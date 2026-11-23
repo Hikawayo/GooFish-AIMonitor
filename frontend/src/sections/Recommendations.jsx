@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api'
 import FolderLayout from '../components/FolderLayout'
 import { Attrs, Card, Button, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
@@ -11,8 +12,9 @@ import PriceTrend from '../components/PriceTrend'
 
 const REVIEW_NOT_RUN = "(审核未运行)"
 
-export default function Recommendations({ refreshKey, onToast }) {
+export default function Recommendations({ refreshKey, onToast, login }) {
   const [items, setItems] = useState(null)
+  const [loadError, setLoadError] = useState('')
   const [busy, setBusy] = useState({})
   const [muteOpen, setMuteOpen] = useState(null)
   const [onlyPassed, setOnlyPassed] = useState(true) // 默认只看 LLM 通过的
@@ -33,7 +35,16 @@ export default function Recommendations({ refreshKey, onToast }) {
     setVisibility('public')
   }, [watches.length, shared.length])
 
-  const load = () => api.recommendations('new').then(setItems)
+  const load = () =>
+    api.recommendations('new')
+      .then((data) => {
+        setLoadError('')
+        setItems(data)
+      })
+      .catch((error) => {
+        setLoadError(error.message || '加载失败')
+        onToast?.(error.message)
+      })
 
   // 本账号默认排序: 加载配置时套用, 用户手动选过就不再覆盖
   useEffect(() => {
@@ -52,7 +63,7 @@ export default function Recommendations({ refreshKey, onToast }) {
     }
   }
   useEffect(() => {
-    load().catch((error) => onToast?.(error.message))
+    load()
   }, [refreshKey])
   useEffect(() => {
     api.config().then(setCfg).catch(() => {})
@@ -185,7 +196,15 @@ export default function Recommendations({ refreshKey, onToast }) {
     )
   }
 
-  if (items === null) return <Spinner />
+  if (items === null) {
+    return loadError ? (
+      <EmptyState
+        title="加载失败"
+        sub={loadError}
+        action={<Button onClick={load}>重试</Button>}
+      />
+    ) : <Spinner />
+  }
 
   const isPublic = visibility === 'public'
   const manual = cfg?.review_enabled === false     // 关掉 AI 审核 → 全部候选都由本人裁决
@@ -261,33 +280,61 @@ export default function Recommendations({ refreshKey, onToast }) {
       )}
       {isPublic ? (
         selected?.items.length ? (
-          <div className="grid">
-            {sortItems(selected.items, sortOrder).map((item) => (
-              <Card key={item.item_id} className="rec">
-                <Thumb url={item.pic_url} />
-                <div className="rec-body">
-                  <a className="rec-title" href={item.url} target="_blank" rel="noreferrer">{item.title}</a>
-                  <div className="rec-price-row"><div className="rec-price">{yuan(item.price)}</div>
-                    <PriceHistory item={item} folder={selected.id} onChange={load} />
+          <>
+            <div className="rec-meta" style={{ marginBottom: 12 }}>
+              <span>在售 {selected.items.length} 件</span>
+              <span>
+                最低挂牌 {yuan(Math.min(...selected.items.map((x) => x.price).filter((p) => p > 0)))}
+              </span>
+            </div>
+            <div className="grid">
+              {sortItems(selected.items, sortOrder).map((item) => (
+                <Card key={item.item_id} className="rec">
+                  <Thumb url={item.pic_url} />
+                  <div className="rec-body">
+                    <a className="rec-title" href={item.url} target="_blank" rel="noreferrer">{item.title}</a>
+                    <div className="rec-price-row"><div className="rec-price">{yuan(item.price)}</div>
+                      <PriceHistory item={item} folder={selected.id} onChange={load} />
+                    </div>
+                    {item.seller_nick && <div className="rec-meta"><Seller nick={item.seller_nick} /></div>}
+                    <Attrs attrs={item.attrs} />
+                    <TimeMeta items={[['上架', ago(item.publish_time)], ['观测', fmtDateTime(item.observed_at)]]} />
+                    <Button
+                      disabled={busy[`shared:${item.item_id}`] || savedShared[item.item_id]}
+                      onClick={() => sharedFavorite(item)}
+                    >
+                      {savedShared[item.item_id] ? '已收藏' : '站内收藏'}
+                    </Button>
                   </div>
-                  {item.seller_nick && <div className="rec-meta"><Seller nick={item.seller_nick} /></div>}
-                  <Attrs attrs={item.attrs} />
-                  <TimeMeta items={[['上架', ago(item.publish_time)], ['观测', fmtDateTime(item.observed_at)]]} />
-                  <Button
-                    disabled={busy[`shared:${item.item_id}`] || savedShared[item.item_id]}
-                    onClick={() => sharedFavorite(item)}
-                  >
-                    {savedShared[item.item_id] ? '已收藏' : '站内收藏'}
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
+                </Card>
+              ))}
+            </div>
+          </>
         ) : <EmptyState title="暂无公开商品" />
       ) : shown.length === 0 ? (
-        <EmptyState
-          title={!manual && onlyPassed && source.length > 0 ? '暂无 AI 通过的推荐' : '暂无新推荐'}
-        />
+        login?.expired ? (
+          <EmptyState
+            title="闲鱼登录已过期"
+            sub="重新扫码后即可继续自动抓取"
+            action={<Link className="btn btn-primary" to="/settings">去重新扫码</Link>}
+          />
+        ) : !login?.has_state ? (
+          <EmptyState
+            title="先扫码登录闲鱼"
+            sub="登录后才能搜索自己的监控条件"
+            action={<Link className="btn btn-primary" to="/settings">去扫码登录</Link>}
+          />
+        ) : watches.length === 0 ? (
+          <EmptyState
+            title="还没有监控条件"
+            sub="建好条件后会自动定时抓取"
+            action={<Link className="btn btn-primary" to="/watches">去新建条件</Link>}
+          />
+        ) : (
+          <EmptyState
+            title={!manual && onlyPassed && source.length > 0 ? '暂无 AI 通过的推荐' : '暂无新推荐'}
+          />
+        )
       ) : (
         <div className="grid">{shown.map(renderCard)}</div>
       )}

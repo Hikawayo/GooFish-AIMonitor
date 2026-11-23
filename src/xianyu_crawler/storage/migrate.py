@@ -58,6 +58,9 @@ COLUMNS: list[tuple[str, str, str]] = [    ("items", "first_price", "REAL"),
     ("app_config", "notify_on_login", "BOOLEAN NOT NULL DEFAULT 1"),
     ("app_config", "notify_on_new", "BOOLEAN NOT NULL DEFAULT 1"),
     ("app_config", "notify_on_sold", "BOOLEAN NOT NULL DEFAULT 1"),
+    ("app_config", "login_alert_sent_at", "DATETIME"),
+    ("watches", "target_price", "REAL"),
+    ("watches", "archived", "BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 

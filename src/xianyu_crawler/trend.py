@@ -65,6 +65,18 @@ def _auto_floor(rows) -> tuple[float | None, int]:
     return floor, excluded
 
 
+def _percentile(sorted_vals: list[float], p: float) -> float:
+    if not sorted_vals:
+        return 0.0
+    if len(sorted_vals) == 1:
+        return float(sorted_vals[0])
+    pos = (len(sorted_vals) - 1) * p
+    lo = int(pos)
+    hi = min(len(sorted_vals) - 1, lo + 1)
+    frac = pos - lo
+    return float(sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * frac)
+
+
 def is_comparable(attrs: dict | None) -> bool:
     """能不能进「最低价 / 中位数」的统计。
 
@@ -118,7 +130,9 @@ def build(rows, mode: str = "all", tz_minutes: int = 480,
     if not points:
         return {"mode": mode, "from": None, "to": None, "series": [], "items": [],
                 "observations": 0, "items_total": 0, "comparable_total": 0,
-                "auto_floor": auto_floor, "excluded": excluded}
+                "auto_floor": auto_floor, "excluded": excluded,
+                "summary": {"min": None, "median": None, "p25": None, "count": 0,
+                            "dropped": 0, "raised": 0}}
 
     buckets: dict[datetime, dict[str, float]] = {}
     titles: dict[str, str] = {}
@@ -146,15 +160,35 @@ def build(rows, mode: str = "all", tz_minutes: int = 480,
             per_item.setdefault(item_id, []).append({"t": stamp, "price": price})
         last.update(pending)
         pending = {}
-        values = [price for item_id, price in last.items()
-                  if comparable_ids is None or item_id in comparable_ids]
+        values = sorted(price for item_id, price in last.items()
+                        if comparable_ids is None or item_id in comparable_ids)
         if values:
-            carried = {"t": stamp, "min": min(values),
+            carried = {"t": stamp, "min": values[0],
+                       "p25": round(_percentile(values, 0.25), 2),
                        "median": float(median(values)), "count": len(values)}
         elif carried is not None:         # 这一桶没有可比挂牌 → 沿用上一桶的统计
             carried = {**carried, "t": stamp}
         if carried is not None:
             series.append(carried)
+
+    first_price: dict[str, float] = {}
+    last_price: dict[str, float] = {}
+    for item_id, _, _, price in points:
+        if comparable_ids is not None and item_id not in comparable_ids:
+            continue
+        first_price.setdefault(item_id, price)
+        last_price[item_id] = price
+    dropped = sum(1 for k, v in last_price.items() if v < first_price[k])
+    raised = sum(1 for k, v in last_price.items() if v > first_price[k])
+    latest_vals = sorted(last_price.values())
+    summary = {
+        "min": latest_vals[0] if latest_vals else None,
+        "p25": round(_percentile(latest_vals, 0.25), 2) if latest_vals else None,
+        "median": float(median(latest_vals)) if latest_vals else None,
+        "count": len(latest_vals),
+        "dropped": dropped,
+        "raised": raised,
+    }
 
     order = sorted(per_item, key=lambda item_id: (-len(per_item[item_id]), item_id))[:MAX_ITEMS]
     items = [{"item_id": item_id, "title": titles.get(item_id, ""),
@@ -163,4 +197,4 @@ def build(rows, mode: str = "all", tz_minutes: int = 480,
             "series": series, "items": items, "observations": len(points),
             "items_total": len(per_item),
             "comparable_total": (len(comparable_ids) if comparable_ids is not None else len(per_item)),
-            "auto_floor": auto_floor, "excluded": excluded}
+            "auto_floor": auto_floor, "excluded": excluded, "summary": summary}
