@@ -536,14 +536,20 @@ button { font-family: inherit; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 12.5px; font-weight: 500; color: var(--fg); }
 .field-hint { font-size: 11.5px; color: var(--dim); line-height: 1.45; }
-.field input, .field textarea, .field select, .req-input {
+.field input, .field textarea, .field select, .req-input, .text-input {
   width: 100%; background: var(--s2); border: 1px solid var(--line);
   border-radius: var(--rad); color: var(--fg);
   padding: 8px 11px; font-weight: 400; font-size: 13px; font-family: var(--font-ui); transition: border-color .15s;
 }
-.field input:focus, .field textarea:focus, .req-input:focus { outline: none; border-color: var(--acc); }
+.field input:focus, .field textarea:focus, .req-input:focus, .text-input:focus { outline: none; border-color: var(--acc); }
 .field textarea, .req-input { resize: vertical; line-height: 1.5; }
-.field input::placeholder, .req-input::placeholder { color: var(--dim); opacity: .7; }
+.field input::placeholder, .req-input::placeholder, .text-input::placeholder { color: var(--dim); opacity: .7; }
+.manual-add-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.manual-add-bar .text-input { flex: 1; min-width: 0; }
+.manual-add-bar .btn { flex: none; white-space: nowrap; }
+.trend-digest { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; margin-bottom: 10px; background: var(--s2); border: 1px solid var(--line); border-radius: var(--rad); font-size: 12.5px; line-height: 1.55; }
+.trend-digest-text { flex: 1; white-space: pre-wrap; min-width: 0; }
+.trend-digest .btn { flex: none; }
 
 /* 开关 */
 .toggle { position: relative; display: inline-flex; align-items: center; gap: 9px; cursor: pointer; }

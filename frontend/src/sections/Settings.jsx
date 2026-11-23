@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import { fmtDateTime } from '../util'
 import Select from '../components/Select'
 import { Card, Button, Spinner, EmptyState, Toggle, Field, ConfirmDialog } from '../components/ui'
 
@@ -500,6 +501,12 @@ export default function Settings({ status }) {
           <div>
             <span className="status-k">定时</span>
             <span className="status-v">{cfg.paused ? '已暂停' : '运行中'}</span>
+          </div>
+          <div>
+            <span className="status-k">版本</span>
+            <span className="status-v" title={status?.build_time ? fmtDateTime(status.build_time) : ''}>
+              {status?.version || 'dev'}
+            </span>
           </div>
         </div>
         {status?.last && (

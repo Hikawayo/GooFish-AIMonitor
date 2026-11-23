@@ -1,4 +1,4 @@
-# 发布上线: 打包 → scp → 服务器 reset → 构建 → 重启 → 探活
+﻿# 发布上线: 打包 → scp → 服务器 reset → 构建 → 重启 → 探活
 # 只输出一行结果; 详细过程写 data/deploy.log
 param([switch]$NoBuild, [switch]$Fast)
 $ErrorActionPreference = 'Stop'
@@ -41,7 +41,8 @@ try {
 
   $built = 'skip'
   if (-not $NoBuild) {
-    $build = & ssh @sshArgs $Server 'cd /srv/GooFish-AIMonitor && flock -w 900 /tmp/xy-deploy.lock docker compose build > /tmp/xy-build.log 2>&1 && echo BUILD_OK || (tail -3 /tmp/xy-build.log; echo BUILD_FAIL)' 2>&1
+    $buildTime = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $build = & ssh @sshArgs $Server "cd /srv/GooFish-AIMonitor && APP_VERSION=$sha APP_BUILD_TIME=$buildTime flock -w 900 /tmp/xy-deploy.lock docker compose build > /tmp/xy-build.log 2>&1 && echo BUILD_OK || (tail -3 /tmp/xy-build.log; echo BUILD_FAIL)" 2>&1
     if ("$build" -notmatch 'BUILD_OK') { Fail "镜像构建失败: $($build | Select-Object -Last 1)" }
     $built = 'build ok'
   }

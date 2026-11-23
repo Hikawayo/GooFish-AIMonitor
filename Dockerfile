@@ -39,6 +39,10 @@ RUN mkdir -p src/xianyu_crawler && touch src/xianyu_crawler/__init__.py \
 # 应用层: 真实源码 + 前端产物。改这里只重跑这两步(秒级), 不动上面的 Chromium 层。
 COPY src ./src
 COPY --from=fe /fe/dist ./src/xianyu_crawler/web/static
+ARG APP_VERSION=dev
+ARG APP_BUILD_TIME=
+ENV XIANYU_APP_VERSION=${APP_VERSION} \
+    XIANYU_APP_BUILD_TIME=${APP_BUILD_TIME}
 
 EXPOSE 8000
 CMD ["python", "-m", "xianyu_crawler.cli", "serve", "--host", "0.0.0.0", "--port", "8000"]

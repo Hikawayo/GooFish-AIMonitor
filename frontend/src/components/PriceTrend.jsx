@@ -328,9 +328,14 @@ export default function PriceTrend({ watches, refreshKey }) {
 
       {error && <p role="alert" className="test-err">{error}</p>}
       {digest && (
-        <div className="trend-note" style={{ marginBottom: 10 }}>
-          {digest.summary}
-          {digest.warn && <span className="test-err">（{digest.warn}）</span>}
+        <div className="trend-digest">
+          <div className="trend-digest-text">
+            {digest.summary}
+            {digest.warn && <span className="test-err">（{digest.warn}）</span>}
+          </div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDigest(null)}>
+            收起
+          </button>
         </div>
       )}
 

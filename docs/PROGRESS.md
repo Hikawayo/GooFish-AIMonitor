@@ -307,7 +307,11 @@
     - `WatchRow.archived`（已登记迁移）：支持条件归档/恢复，归档后不抓取但保留历史走势。
     - `digest.py` + `POST /api/digest`：SQL 先统计，再可选调用兼容 LLM 生成 3–5 句简短趋势简报（不编造交易量/预测百分比），`PriceTrend.jsx` 提供「趋势简报」按钮。
     - `storage/backup.py` + `scheduler.py`：每日一次 SQLite 在线备份，滚动保留最近 7 份。
-- **验证**：`pwsh -File scripts/verify.ps1 -Frontend` 通过（`verify: ? passed | pyright 0 errors | build ok`），新增 `tests/test_multiuser.py` 与 `tests/test_api.py` 回归测试。**未验证**：需等推送后服务器自动更新完成，再用全新 SSO 账号按「阶段二·五 · 验收」在手机端实测一遍。
+- **验证**：`pwsh -File scripts/verify.ps1 -Frontend` 通过（`verify: ? passed | pyright 0 errors | build ok`），新增 `tests/test_multiuser.py` 与 `tests/test_api.py` 回归测试。**未验证**：需用全新 SSO 账号按「阶段二·五 · 验收」在手机端实测一遍。
+- **2026-11-24 补充修复（样式、版本感知、自动更新加固）**：
+  - **界面样式**：`styles.css` 抽出 `.text-input` 与 `.manual-add-bar`、`.trend-digest`；`Drops.jsx` 手动加监控栏与 `Watches.jsx` 文件夹重命名输入框统一套用站内样式并收紧按钮宽度；`PriceTrend.jsx` 趋势简报块支持多行换行与收起。
+  - **版本号展示**：`Dockerfile` / `docker-compose.yml` / `scripts/server-autoupdate.sh` / `scripts/deploy.ps1` 构建时注入 `APP_VERSION` 与 `APP_BUILD_TIME`；`/api/status` 返回 `version` / `build_time`；`Settings.jsx`「运行状态」卡片展示当前版本（悬停显示构建时间）。
+  - **自动更新加固**：`scripts/server-autoupdate.sh` 改为 `HTTP/1.1` + 低速超时 + 3 次重试，支持读取服务器本地 `data/autoupdate.env`（不进 git）配置可选 `HTTPS_PROXY` 或备用镜像 `GIT_FETCH_URL`。
 
 ## 下一步
 

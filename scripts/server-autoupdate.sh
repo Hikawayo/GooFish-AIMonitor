@@ -4,17 +4,58 @@
 set -uo pipefail
 cd /srv/GooFish-AIMonitor || exit 1
 
+# 可选本地配置(不进 git): 支持 HTTPS_PROXY / HTTP_PROXY / GIT_FETCH_URL(备用镜像)
+if [ -f data/autoupdate.env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . data/autoupdate.env
+  set +a
+fi
+
 # 与 scripts/deploy.ps1 共用同一把锁, 避免手动部署和自动更新同时构建
 exec 9>/tmp/xy-deploy.lock
 flock -w 900 9 || { echo "[$(date -Is)] 另一个部署还在跑, 跳过本轮"; exit 0; }
 
-git fetch origin main --quiet || { echo "[$(date -Is)] fetch 失败(网络?)"; exit 1; }
+fetch_with_retry() {
+  local target="$1"
+  local refspec="$2"
+  local tries="$3"
+  local i
+  for i in $(seq 1 "$tries"); do
+    if git -c http.version=HTTP/1.1 \
+           -c http.lowSpeedLimit=1000 \
+           -c http.lowSpeedTime=20 \
+           fetch "$target" "$refspec" --quiet; then
+      return 0
+    fi
+    [ "$i" -lt "$tries" ] && sleep 3
+  done
+  return 1
+}
+
+if ! fetch_with_retry origin main 3; then
+  if [ -n "${GIT_FETCH_URL:-}" ]; then
+    echo "[$(date -Is)] 直连 GitHub 失败, 改用备用源重试"
+    fetch_with_retry "$GIT_FETCH_URL" "refs/heads/main:refs/remotes/origin/main" 2 || {
+      echo "[$(date -Is)] fetch 失败(直连与备用源均不可用)"
+      exit 1
+    }
+  else
+    echo "[$(date -Is)] fetch 失败(网络?)"
+    exit 1
+  fi
+fi
+
 local_head=$(git rev-parse HEAD)
 remote_head=$(git rev-parse origin/main)
 [ "$local_head" = "$remote_head" ] && exit 0
 
 echo "[$(date -Is)] 发现新提交 ${local_head:0:7} -> ${remote_head:0:7}"
 git reset --hard "$remote_head" --quiet || exit 1
+
+export APP_VERSION="${remote_head:0:7}"
+export APP_BUILD_TIME
+APP_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 if ! docker compose build > /tmp/xy-autobuild.log 2>&1; then
   echo "[$(date -Is)] 构建失败, 保留当前版本"

@@ -1,5 +1,6 @@
 """FastAPI 控制台后端。"""
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -510,6 +511,8 @@ def api_status(s: Session = Depends(get_db)):
         "last": runtime.job_state()["last"],
         "paused": cfg.paused,
         "schedule_minutes": cfg.schedule_minutes,
+        "version": os.environ.get("XIANYU_APP_VERSION") or "dev",
+        "build_time": os.environ.get("XIANYU_APP_BUILD_TIME") or None,
     }
 
 

@@ -93,13 +93,13 @@ export default function Drops({ refreshKey, onToast }) {
     <section>
       <h1 className="page-title">收藏监控</h1>
       {error && <p role="alert" className="test-err">{error}</p>}
-      <div className="form-row" style={{ marginBottom: 14 }}>
+      <div className="manual-add-bar">
         <input
+          className="text-input"
           value={manualInput}
           onChange={(e) => setManualInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') addManual() }}
           placeholder="粘贴闲鱼商品链接或商品 ID 加入本地跟踪…"
-          style={{ flex: 1, minWidth: 220 }}
         />
         <Button onClick={addManual} disabled={addingManual || !manualInput.trim()}>
           {addingManual ? '添加中…' : '加入监控'}

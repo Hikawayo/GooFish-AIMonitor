@@ -316,9 +316,15 @@ export default function Watches() {
                 {renamingFolder?.id === folder.id ? (
                   <>
                     <input
+                      className="text-input"
+                      style={{ flex: 1, minWidth: 160 }}
                       value={renamingFolder.name}
                       maxLength={80}
                       onChange={(e) => setRenamingFolder({ ...renamingFolder, name: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && renamingFolder.name.trim()) saveFolderRename()
+                        if (e.key === 'Escape') setRenamingFolder(null)
+                      }}
                     />
                     <Button className="btn-sm" onClick={saveFolderRename} disabled={!renamingFolder.name.trim()}>
                       保存
