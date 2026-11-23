@@ -4,6 +4,7 @@ import FolderLayout from '../components/FolderLayout'
 import { Attrs, Card, Badge, Spinner, EmptyState, Thumb, TimeMeta, Seller } from '../components/ui'
 import { yuan, fmtDate, ago } from '../util'
 import Folders, { ownFolders, useFolders } from '../components/Folders'
+import SnapshotButton from '../components/SnapshotButton'
 import ItemSort, { DEFAULT_SORT, sortItems } from '../components/ItemSort'
 import PriceHistory from '../components/PriceHistory'
 import PriceTrend from '../components/PriceTrend'
@@ -13,6 +14,7 @@ export default function Drops({ refreshKey, onToast }) {
   const [visibility, setVisibility] = useState('mine')
   const [folderId, setFolderId] = useState('')
   const [sortOrder, setSortOrder] = useState(DEFAULT_SORT)
+  const shotRef = useRef(null)   // 快照范围: 标题 + 总趋势图 + 商品卡
   const sortTouched = useRef(false)
   const [cfg, setCfg] = useState(null)
   const [loadError, setLoadError] = useState('')
@@ -72,10 +74,13 @@ export default function Drops({ refreshKey, onToast }) {
       {error && <p role="alert" className="test-err">{error}</p>}
       <FolderLayout folders={<Folders choices={choices} selected={selected?.id} onSelect={setFolderId}
         visibility={visibility} onVisibility={setVisibility} counts={counts} />}>
-        <div className="folder-results">
+        <div className="folder-results" ref={shotRef}>
       {selected && <div className="folder-heading">
         <h2>{selected.name}</h2>
-        <ItemSort value={sortOrder} onChange={changeSort} onMakeDefault={makeSortDefault} />
+        <div className="folder-tools">
+          <ItemSort value={sortOrder} onChange={changeSort} onMakeDefault={makeSortDefault} />
+          <SnapshotButton target={shotRef} name={selected.name} onToast={onToast} />
+        </div>
       </div>}
       {selected?.watches?.length > 0 && (
         <PriceTrend watches={selected.watches} refreshKey={refreshKey} />

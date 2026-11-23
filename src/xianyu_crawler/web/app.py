@@ -393,6 +393,8 @@ def api_status(s: Session = Depends(get_db)):
 # ---------- static SPA (前端构建产物, C4) ----------
 if _STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=_STATIC_DIR / "assets"), name="assets")
+    if (_STATIC_DIR / "tabler").exists():      # 自托管的图标字体(快照里要能内联)
+        app.mount("/tabler", StaticFiles(directory=_STATIC_DIR / "tabler"), name="tabler")
 
     @app.get("/{full_path:path}")
     def spa(full_path: str):

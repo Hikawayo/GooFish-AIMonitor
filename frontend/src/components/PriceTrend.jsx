@@ -24,7 +24,7 @@ function tickLabel(ms, mode, spanMs) {
   return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
 }
 
-function Chart({ data, width, mode, base, range, onRange, hover, onHover }) {
+function Chart({ data, width, mode, base, range, onRange, hover, onHover, colors }) {
   const svg = useRef(null)
   const drag = useRef(null)
   const plotW = width - PAD.left - PAD.right
@@ -111,11 +111,12 @@ function Chart({ data, width, mode, base, range, onRange, hover, onHover }) {
       </defs>
 
       {/* 透明底: 没有它的话, 指针落在空白处不触发事件, 悬浮要扫到线上才有反应 */}
-      <rect x="0" y="0" width={width} height={HEIGHT} className="trend-bg" />
+      <rect x="0" y="0" width={width} height={HEIGHT} fill="transparent" className="trend-bg" />
 
       {yTicks.map((value) => (
         <g key={`y${value}`}>
-          <line x1={PAD.left} x2={width - PAD.right} y1={y(value)} y2={y(value)} className="trend-grid" />
+          <line x1={PAD.left} x2={width - PAD.right} y1={y(value)} y2={y(value)}
+            className="trend-grid" stroke={colors.grid} />
           <text x={PAD.left - 8} y={y(value) + 3.5} className="trend-axis" textAnchor="end">{yuan(value)}</text>
         </g>
       ))}
@@ -129,18 +130,21 @@ function Chart({ data, width, mode, base, range, onRange, hover, onHover }) {
       <g clipPath="url(#trend-clip)">
         {data.items.map((item) => (
           <polyline key={item.item_id} points={line(item.points, 'price')}
-            className="trend-item-line" fill="none">
+            className="trend-item-line" fill="none" stroke={colors.item}>
             <title>{item.title}</title>
           </polyline>
         ))}
-        <polyline points={line(data.series, 'median')} className="trend-median-line" fill="none" />
-        <polyline points={line(data.series, 'min')} className="trend-min-line" fill="none" />
+        <polyline points={line(data.series, 'median')} className="trend-median-line"
+          fill="none" stroke={colors.median} strokeDasharray="6 5" />
+        <polyline points={line(data.series, 'min')} className="trend-min-line"
+          fill="none" stroke={colors.min} strokeWidth="2.2" />
         {hover && (
           <>
             <line x1={xIso(hover.t)} x2={xIso(hover.t)} y1={PAD.top}
-              y2={HEIGHT - PAD.bottom} className="trend-cursor" />
-            <circle cx={xIso(hover.t)} cy={y(hover.min)} r="3.2" className="trend-dot" />
-            <circle cx={xIso(hover.t)} cy={y(hover.median)} r="2.6" className="trend-dot trend-dot-soft" />
+              y2={HEIGHT - PAD.bottom} className="trend-cursor" stroke={colors.grid} />
+            <circle cx={xIso(hover.t)} cy={y(hover.min)} r="3.2" className="trend-dot" fill={colors.min} />
+            <circle cx={xIso(hover.t)} cy={y(hover.median)} r="2.6"
+                className="trend-dot trend-dot-soft" fill={colors.median} />
           </>
         )}
       </g>
@@ -164,10 +168,10 @@ function Chart({ data, width, mode, base, range, onRange, hover, onHover }) {
       })()}
 
       {/* 四条可拖的边: 上下调价格范围, 左右调日期范围 */}
-      <line x1={PAD.left} x2={width - PAD.right} y1={y(pLow)} y2={y(pLow)} className="trend-handle" />
-      <line x1={PAD.left} x2={width - PAD.right} y1={y(pHigh)} y2={y(pHigh)} className="trend-handle" />
-      <line x1={x(t0)} x2={x(t0)} y1={PAD.top} y2={HEIGHT - PAD.bottom} className="trend-handle" />
-      <line x1={x(t1)} x2={x(t1)} y1={PAD.top} y2={HEIGHT - PAD.bottom} className="trend-handle" />
+      <line x1={PAD.left} x2={width - PAD.right} y1={y(pLow)} y2={y(pLow)} className="trend-handle" stroke={colors.min} strokeDasharray="5 4" />
+      <line x1={PAD.left} x2={width - PAD.right} y1={y(pHigh)} y2={y(pHigh)} className="trend-handle" stroke={colors.min} strokeDasharray="5 4" />
+      <line x1={x(t0)} x2={x(t0)} y1={PAD.top} y2={HEIGHT - PAD.bottom} className="trend-handle" stroke={colors.min} strokeDasharray="5 4" />
+      <line x1={x(t1)} x2={x(t1)} y1={PAD.top} y2={HEIGHT - PAD.bottom} className="trend-handle" stroke={colors.min} strokeDasharray="5 4" />
       <rect className="trend-grip" x={PAD.left + plotW / 2 - 14} y={y(pLow) - 3} width={28} height={6} rx={3} />
       <rect className="trend-grip" x={PAD.left + plotW / 2 - 14} y={y(pHigh) - 3} width={28} height={6} rx={3} />
       <rect className="trend-grip" x={x(t0) - 3} y={PAD.top + plotH / 2 - 14} width={6} height={28} rx={3} />
@@ -181,7 +185,19 @@ function Chart({ data, width, mode, base, range, onRange, hover, onHover }) {
   )
 }
 
+function chartColors() {
+  const style = getComputedStyle(document.getElementById('app') || document.documentElement)
+  const pick = (name, fallback) => (style.getPropertyValue(name) || '').trim() || fallback
+  return {
+    min: pick('--acc', '#00aabb'),
+    median: pick('--dim', '#5b6b7a'),
+    item: pick('--line2', '#c9d3dc'),
+    grid: pick('--line', '#e3e9ee'),
+  }
+}
+
 export default function PriceTrend({ watches, refreshKey }) {
+  const colors = chartColors()
   const [mode, setMode] = useState('all')
   const [open, setOpen] = useState(() => localStorage.getItem('xy-trend') !== '0')
   const [data, setData] = useState(null)
@@ -300,7 +316,7 @@ export default function PriceTrend({ watches, refreshKey }) {
                 </span>
               </div>
               <div ref={box}>
-                <Chart data={data} width={width} mode={mode} base={base} range={range}
+                <Chart data={data} width={width} mode={mode} base={base} range={range} colors={colors}
                   onRange={setView} hover={hover} onHover={setHover} />
               </div>
               <div className="trend-legend">
