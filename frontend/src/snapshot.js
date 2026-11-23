@@ -129,13 +129,15 @@ export function renderSnapshot({ name, items, series }) {
   if (prices.length) {
     const sorted = [...prices].sort((a, b) => a - b)
     const median = sorted[Math.floor(sorted.length / 2)]
+    const soldCount = items.filter((item) => item.dead).length
     const stats = [
-      ['在售', `${items.length} 件`],
+      soldCount ? ['在售', `${items.length - soldCount} 件`] : ['在售', `${items.length} 件`],
       ['最低', price(Math.min(...prices))],
       ['中位', price(median)],
       ['最高', price(Math.max(...prices))],
     ]
     let sx = PAD
+    if (soldCount) stats.splice(1, 0, ['已售出', `${soldCount} 件`])
     stats.forEach(([label, value]) => {
       ctx.font = `19px ${FONT}`
       ctx.fillStyle = c.dim
@@ -154,14 +156,15 @@ export function renderSnapshot({ name, items, series }) {
   // 表头
   ctx.fillStyle = c.fg
   ctx.font = `bold 24px ${FONT}`
-  ctx.fillText('在售商品', PAD, tableTop)
+  ctx.fillText('商品', PAD, tableTop)
 
   const cols = [
     { label: '价格', width: 150, align: 'right' },
-    { label: '标题', width: 620, align: 'left' },
-    { label: '卖家', width: 190, align: 'left' },
-    { label: '地区', width: 110, align: 'left' },
-    { label: '属性', width: 250, align: 'left' },
+    { label: '标题', width: 560, align: 'left' },
+    { label: '卖家', width: 180, align: 'left' },
+    { label: '地区', width: 100, align: 'left' },
+    { label: '属性', width: 220, align: 'left' },
+    { label: '状态', width: 130, align: 'left' },
   ]
   const columnX = []
   let cursor = PAD
@@ -204,15 +207,21 @@ export function renderSnapshot({ name, items, series }) {
     ctx.fillText(clip(ctx, item.location || '', cols[3].width), columnX[3], rowY)
 
     const tags = []
-    if (item.dead) tags.push(`${item.dead_reason === '已售出' ? '已售出' : '已失效'} ${shortDate(item.dead_at).slice(0, 5)}`)
+
     if (item.promo_price && item.list_price > item.promo_price) tags.push(`平台优惠 ${price(item.promo_price)}`)
     else if (item.original_price > item.price) tags.push(`已降 ${price(item.original_price - item.price)}`)
     if (item.attrs?.seat && item.attrs.seat !== '未知') tags.push(item.attrs.seat)
     if (item.attrs?.qty > 1) tags.push(`${item.attrs.qty} 张`)
     if (item.attrs?.bundle) tags.push('捆绑')
     if (item.attrs?.deposit) tags.push('定金')
-    ctx.fillStyle = item.dead ? c.warn : (tags.length && /^(平台优惠|已降)/.test(tags[0]) ? c.warn : c.dim)
+    ctx.fillStyle = tags.length && /^(平台优惠|已降)/.test(tags[0]) ? c.warn : c.dim
     ctx.fillText(clip(ctx, tags.join(' · '), cols[4].width), columnX[4], rowY)
+
+    // 状态: 售出的写售出时间, 一眼能看到
+    if (item.dead) {
+      ctx.fillStyle = c.warn
+      ctx.fillText(clip(ctx, `${item.dead_reason || '已失效'} ${shortDate(item.dead_at).slice(0, 5)}`, cols[5].width), columnX[5], rowY)
+    }
   })
 
   // 页脚
