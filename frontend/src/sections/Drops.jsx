@@ -63,6 +63,7 @@ export default function Drops({ refreshKey, onToast }) {
     ?? choices.find((folder) => items.some((item) => inFolder(item, folder)))
     ?? choices[0]
   const shown = items.filter((item) => inFolder(item, selected))
+  const ordered = sortItems(shown, sortOrder)   // 渲染与导出共用同一顺序
   const counts = Object.fromEntries(choices.map((folder) => [
     folder.id, items.filter((item) => inFolder(item, folder)).length,
   ]))
@@ -78,7 +79,7 @@ export default function Drops({ refreshKey, onToast }) {
         <h2>{selected.name}</h2>
         <div className="folder-tools">
           <ItemSort value={sortOrder} onChange={changeSort} onMakeDefault={makeSortDefault} />
-          <SnapshotButton name={selected.name} watches={selected.watches} items={shown} onToast={onToast} />
+          <SnapshotButton name={selected.name} watches={selected.watches} items={ordered} onToast={onToast} />
         </div>
       </div>}
       {selected?.watches?.length > 0 && (
@@ -88,7 +89,7 @@ export default function Drops({ refreshKey, onToast }) {
         <EmptyState title="还没有收藏" />
       ) : (
         <div className="grid">
-          {sortItems(shown, sortOrder).map((it) => (
+          {ordered.map((it) => (
             <Card key={it.item_id} className={`rec${it.dead ? ' dead' : ''}`}>
               <Thumb url={it.pic_url} dead={it.dead} deadReason={it.dead_reason} />
               <div className="rec-body">
