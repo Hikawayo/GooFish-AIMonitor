@@ -44,6 +44,13 @@
 - **黑色粗边框**：图表的四个拖拽感应条 `.trend-hit` 的透明填充来自 CSS 类，克隆进 SVG 后丢失 → 默认黑；改成 `fill="transparent"` 属性。四个圆角手柄 `.trend-grip` 同理，截图前用**内联 `display:none`** 隐藏（类规则在克隆里不可靠）。
 - **实测**：导出 `对邦-20261123-0947.png`，2360×3504，4 列卡片、图表比例正常、无黑边无手柄。
 
+## 2026-11-23 服务器端自动更新（推送即上线）
+
+- **做法**：不引入 GitHub Actions，用服务器自己的 systemd timer 每 2 分钟检查一次 `origin/main`，有新提交就 `git reset --hard` → `docker compose build` → `up -d` → 探活。脚本 `scripts/server-autoupdate.sh`，单元 `xy-autoupdate.{service,timer}`（装在 `/etc/systemd/system/`）。
+- **为什么不用 Actions**：仓库虽然是公开的（服务器能匿名 `git ls-remote`），但 Actions 要 SSH 到服务器，必须在 GitHub 里存 3 个 repo secret（host/user/key）。而服务器自己就能拉代码，等于少一层、少一堆密钥、也不烧 Actions 分钟。Actions 唯一的额外价值是「推送后立刻部署 + 有运行日志」；延迟由 2 分钟轮询顶上。
+- **安全边界**：构建失败不重启旧容器（保留上一版）；`flock /tmp/xy-deploy.lock` 与 `scripts/deploy.ps1` 共用一把锁，手动部署与自动更新不会同时构建；`data/` 是 gitignore，`reset --hard` 不碰。
+- **代价**：推送后最多 2 分钟才上线；若正好在抓取中被重启，那一轮抓取会中断（定时任务下一轮会补）。
+
 ## 2026-11-23 售出商品可见性 / 优惠价被覆盖 / 扫描跳过已失效
 
 - **收藏页加「在售 / 售出」分栏**：售出的商品不会再变价，混在长列表末尾找不到。分栏后售出卡片的时间行把「调价」换成「售出」（取 `dead_at`，DTO 新增 `dead_at`）。

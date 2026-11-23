@@ -41,12 +41,12 @@ try {
 
   $built = 'skip'
   if (-not $NoBuild) {
-    $build = & ssh @sshArgs $Server 'cd /srv/GooFish-AIMonitor && docker compose build > /tmp/xy-build.log 2>&1 && echo BUILD_OK || (tail -3 /tmp/xy-build.log; echo BUILD_FAIL)' 2>&1
+    $build = & ssh @sshArgs $Server 'cd /srv/GooFish-AIMonitor && flock -w 900 /tmp/xy-deploy.lock docker compose build > /tmp/xy-build.log 2>&1 && echo BUILD_OK || (tail -3 /tmp/xy-build.log; echo BUILD_FAIL)' 2>&1
     if ("$build" -notmatch 'BUILD_OK') { Fail "镜像构建失败: $($build | Select-Object -Last 1)" }
     $built = 'build ok'
   }
 
-  $up = & ssh @sshArgs $Server 'cd /srv/GooFish-AIMonitor && docker compose up -d --no-build 2>&1 | tail -1' 2>&1
+  $up = & ssh @sshArgs $Server 'cd /srv/GooFish-AIMonitor && flock -w 900 /tmp/xy-deploy.lock docker compose up -d --no-build 2>&1 | tail -1' 2>&1
   if ($LASTEXITCODE -ne 0) { Fail '容器重启失败' }
   Start-Sleep -Seconds 6
   $code = (& ssh @sshArgs $Server 'curl -sk -o /dev/null -w "%{http_code}" https://127.0.0.1:8454/') 2>&1
