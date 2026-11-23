@@ -23,6 +23,18 @@
 - **GitHub**：期间 `github.com:443` 中断过，恢复后已推送；服务器工作副本用 `git bundle` 同步，未直接走 GitHub。
 - **既有能力**：逐条 AI 审核、提示词、搜索和 HTTPS 均已上线。`libatomic1` 构建补丁已进入 `Dockerfile`。
 
+## 2026-11-23 平台优惠价（挂牌价没动但实付更低）
+
+- **现象**：Encore 那件挂牌 ¥3,400 一直不变，但买家实付 ¥1,700 —— 卖家用的是「平台优惠 减¥1,700」，不是改挂牌价，所以按 `soldPrice` 记录永远看不到降价。
+- **接口事实**（线上抓的真实响应）：`itemDO.promotionPriceDO = {"promotionName":"活动价","promotionPriceMin":"1700.00","minDiscountFeeStr":"1700.00"}`，`soldPrice` 仍是 `3400`。之前探过的 CD 也有这个字段（94 → 活动价 93），说明是通用字段。
+- **实现**：
+  - `liveness._promo_price()` 从 `promotionPriceDO` 取最低有效价，**必须低于挂牌价**才算优惠；`DetailReading.promo_price` 带出。
+  - `ItemRow.promo_price` / `list_price` 两列（已登记迁移）；`repo.set_promo_price()` 记录，优惠撤掉时清空。
+  - `refresh_local_favorites` 按 **实付价 = min(挂牌, 优惠价)** 写观测与判断降价，事件理由写「平台优惠降价」。
+  - DTO 带 `promo_price` / `list_price`；卡片在价格旁显示「平台优惠 · 挂牌 ¥3,400」（青色，与红色「已降」区分）。
+- **线上实测**：强刷 Encore 那件 → `1700 / promo 1700 / list 3400 / reduce 1700`，事件 `平台优惠降价 3400.0 → 1700.0`。
+- **口径说明**：`latest_price` 存的是**实付价**（优惠时按优惠价），因此走势与「已降」反映的是真实到手价；挂牌价单独存在 `list_price` 里。搜索接口不返回优惠价，所以只有「收藏详情复检」这条路能发现优惠。
+
 ## 2026-11-23 竖屏手机：文件夹置顶 + 实时事件抽屉
 
 - **两个问题**：① 手机上文件夹被挤到内容最下面（DOM 顺序是「结果 → 分割条 → 文件夹」，移动端单列后没调顺序）；② `@media (max-width: 1180px)` 直接把 `.rail { display: none }`，手机完全看不到实时事件。
