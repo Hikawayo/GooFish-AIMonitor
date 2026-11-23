@@ -175,6 +175,17 @@ def set_item_attrs(s: Session, item_id: str, attrs: dict) -> None:
     s.commit()
 
 
+def set_promo_price(s: Session, item_id: str, promo: float | None,
+                    list_price: float | None) -> None:
+    """记下平台优惠价(有优惠时同时留挂牌价); 优惠没了就清空。"""
+    row = s.get(ItemRow, item_id)
+    if row is None:
+        return
+    row.promo_price = promo
+    row.list_price = list_price if promo else None
+    s.commit()
+
+
 def item_attrs_of(s: Session, item_id: str) -> dict | None:
     raw = s.scalar(select(ItemRow.attrs).where(ItemRow.item_id == item_id))
     try:

@@ -33,6 +33,8 @@ class ItemRow(Base):
     first_price: Mapped[float] = mapped_column(Float)
     latest_price: Mapped[float] = mapped_column(Float)
     original_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 卖家最初挂牌价
+    promo_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 平台优惠后实付价
+    list_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)    # 有优惠时的挂牌价
     attrs: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # 模板抽取的属性(JSON)
     reduce_price: Mapped[float] = mapped_column(Float, default=0.0)  # 闲鱼"收藏后降价"金额
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=_now)   # 入库时间

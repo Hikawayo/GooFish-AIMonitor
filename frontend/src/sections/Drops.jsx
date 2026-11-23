@@ -97,6 +97,9 @@ export default function Drops({ refreshKey, onToast }) {
                     {it.original_price > it.price && (
                       <span className="rec-drop">已降 {yuan(it.original_price - it.price)}</span>
                     )}
+                    {it.promo_price && it.list_price > it.promo_price && (
+                      <span className="rec-promo">平台优惠 · 挂牌 {yuan(it.list_price)}</span>
+                    )}
                   </div>
                   <PriceHistory item={it} onChange={load} />
                 </div>

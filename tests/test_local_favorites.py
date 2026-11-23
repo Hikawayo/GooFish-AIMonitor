@@ -1,5 +1,7 @@
 from datetime import datetime
 
+import json
+
 from fastapi.testclient import TestClient
 
 from xianyu_crawler import liveness, service
@@ -106,3 +108,47 @@ def test_local_save_and_price_refresh_only_due_items(tmp_path, monkeypatch):
         assert dropped.latest_price == 800 and dropped.reduce_price == 200
         assert unknown is not None and not unknown.dead and unknown.latest_price == 1000
         assert [event.type for event in repo.recent_events(db)] == ["price_drop"]
+
+
+def test_platform_promo_counts_as_price_drop(monkeypatch):
+    """平台优惠: 挂牌价还是 3400, 实付 1700 —— 必须按实付记一笔并进事件流。"""
+    from xianyu_crawler.liveness import DetailReading
+    from xianyu_crawler.storage import repo
+    from xianyu_crawler.storage.db import make_session
+    from xianyu_crawler.storage.orm import ItemRow
+
+    d = {"ret": ["SUCCESS::调用成功"], "data": {"itemDO": {
+        "itemId": "p1", "soldPrice": "3400",
+        "promotionPriceDO": {"promotionPriceMin": "1700.00"}}}}
+    reading = liveness.parse_detail(d, "p1")
+    assert reading.price == 3400 and reading.promo_price == 1700
+
+    s = make_session("sqlite:///:memory:", create=True)
+    item = Item(item_id="p1", title="票", url="u", price=3400)
+    repo.create_recommendation(s, item, "票", ok=True)
+    repo.save_local_favorite(s, "p1")
+    monkeypatch.setattr(liveness, "check_detail", lambda _ctx, _id: reading)
+    service.refresh_local_favorites(None, s, Settings(liveness_max_checks=5))
+
+    row = s.get(ItemRow, "p1")
+    assert row is not None
+    assert row.latest_price == 1700 and row.promo_price == 1700 and row.list_price == 3400
+    drops = [e for e in repo.recent_events(s) if e.type == "price_drop"]
+    assert drops and "平台优惠" in json.loads(drops[0].payload)["reason"]
+
+
+def test_promo_cleared_when_discount_disappears(monkeypatch):
+    """优惠撤掉 → 回到挂牌价, 优惠标记清空。"""
+    from xianyu_crawler.liveness import DetailReading
+    from xianyu_crawler.storage import repo
+    from xianyu_crawler.storage.db import make_session
+    from xianyu_crawler.storage.orm import ItemRow
+
+    s = make_session("sqlite:///:memory:", create=True)
+    repo.create_recommendation(s, Item(item_id="p2", title="票", url="u", price=3400), "票", ok=True)
+    repo.save_local_favorite(s, "p2")
+    monkeypatch.setattr(liveness, "check_detail",
+                        lambda _ctx, _id: DetailReading(price=3400, promo_price=None))
+    service.refresh_local_favorites(None, s, Settings(liveness_max_checks=5))
+    row = s.get(ItemRow, "p2")
+    assert row is not None and row.latest_price == 3400 and row.promo_price is None

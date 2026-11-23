@@ -389,18 +389,26 @@ def refresh_local_favorites(ctx, session: Session, settings: Settings) -> int:
                 "title": row.title, "url": row.url, "pic": row.pic_url, "reason": "详情已失效",
             })
         elif reading.price is not None:
-            repo.record_local_price(session, row, reading.price)
+            # 平台优惠: 挂牌价没动但实付更低, 走势必须按实付价走, 否则这次降价永远看不到
+            promo = reading.promo_price
+            effective = promo if (promo is not None and promo < reading.price) else reading.price
+            discounted = effective < reading.price
+            repo.set_promo_price(session, row.item_id,
+                                 promo if discounted else None,
+                                 reading.price if discounted else None)
+            repo.record_local_price(session, row, effective)
             # 平台给了「卖家原价 + 发布时间」时, 补一条最早的观测, 走势才有起点
             if (reading.original_price and reading.published_at
                     and reading.original_price > reading.price
                     and reading.published_at <= repo._now()):
                 repo.seed_original_price(session, row.item_id,
                                          reading.original_price, reading.published_at)
-            drop = detect_drop(row.item_id, previous, reading.price, settings.min_drop_pct, settings.min_drop_abs)
-            if drop and not repo.has_drop_event_at_price(session, row.item_id, reading.price):
+            drop = detect_drop(row.item_id, previous, effective, settings.min_drop_pct, settings.min_drop_abs)
+            if drop and not repo.has_drop_event_at_price(session, row.item_id, effective):
                 repo.add_event(session, row.item_id, "price_drop", {
                     "title": row.title, "url": row.url, "pic": row.pic_url,
-                    "reason": "站内收藏详情复检", "prev_price": drop.prev_price, "curr_price": drop.curr_price,
+                    "reason": "平台优惠降价" if discounted else "站内收藏详情复检",
+                    "prev_price": drop.prev_price, "curr_price": drop.curr_price,
                     "drop_abs": drop.drop_abs, "drop_pct": drop.drop_pct,
                 })
                 drops += 1

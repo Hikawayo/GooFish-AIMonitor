@@ -101,15 +101,34 @@ def check_detail_price(ctx, item_id: str) -> tuple[float | None, bool]:
 
 @dataclass
 class DetailReading:
-    """一次详情读取的结果: 现价、是否失效, 以及卖家最初挂的价格。"""
+    """一次详情读取的结果: 现价、是否失效, 卖家最初挂的价格, 以及平台优惠价。"""
     price: float | None = None
     dead: bool = False
     original_price: float | None = None     # itemDO.originalPrice, 卖家降价前的挂牌价
     published_at: datetime | None = None    # itemDO.gmtCreate, naive UTC
+    promo_price: float | None = None        # 平台优惠后的实付价(itemDO.promotionPriceDO)
+
+
+def _promo_price(item: dict, listing: float | None) -> float | None:
+    """平台优惠价: 挂牌价不动, 但买家实付更低(「平台优惠 减¥1700」)。
+
+    详情接口放在 promotionPriceDO.promotionPriceMin; 只有真的低于挂牌价才算数。
+    """
+    block = item.get("promotionPriceDO")
+    if not isinstance(block, dict):
+        return None
+    for key in ("promotionPriceMin", "promotionPrice", "minPrice", "discountPrice"):
+        value = to_price(block.get(key))
+        if value is None or not isfinite(value) or value <= 0:
+            continue
+        if listing is not None and value >= listing:
+            return None                     # 没便宜就不当成优惠价
+        return value
+    return None
 
 
 def parse_detail(detail: dict | None, item_id: str) -> DetailReading:
-    """在现价之外补上「发布价 + 发布时间」, 用来给走势补一个最早的点。"""
+    """在现价之外补上「发布价 + 发布时间 + 平台优惠价」, 用来给走势补一个最早的点。"""
     price, dead = parse_detail_price(detail, item_id)
     reading = DetailReading(price=price, dead=dead)
     if dead or not detail:
@@ -117,6 +136,7 @@ def parse_detail(detail: dict | None, item_id: str) -> DetailReading:
     item = (detail.get("data") or {}).get("itemDO") or {}
     if str(item.get("itemId")) != item_id:
         return reading
+    reading.promo_price = _promo_price(item, price)
     original = to_price(item.get("originalPrice"))
     if original is not None and isfinite(original) and original > 0:
         reading.original_price = original

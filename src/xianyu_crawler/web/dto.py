@@ -121,6 +121,8 @@ class RecommendationOut(BaseModel):
     price: float
     original_price: float | None = None   # 卖家最初挂牌价(平台给), 比现价高才有意义
     attrs: dict | None = None             # 模板抽取的属性(票务: 席种/张数/捆绑/定金)
+    promo_price: float | None = None      # 平台优惠后的实付价
+    list_price: float | None = None       # 有优惠时的挂牌价
     saved: bool = False                   # 是否已站内收藏(决定「价格记录」里能否取消收藏)
     location: str | None = None
     condition: str | None = None
@@ -149,6 +151,8 @@ class FavoriteOut(BaseModel):
     price: float
     original_price: float | None = None
     attrs: dict | None = None
+    promo_price: float | None = None
+    list_price: float | None = None
     saved: bool = True                    # 收藏页里的商品默认都可取消
     reduce_price: float
     watch_ids: list[int] = []
@@ -259,6 +263,7 @@ def itemrow_to_rec(r: ItemRow) -> RecommendationOut:
         item_id=r.item_id, title=r.title, url=r.url, price=r.latest_price,
         original_price=r.original_price,
         attrs=json.loads(r.attrs) if r.attrs else None,
+        promo_price=r.promo_price, list_price=r.list_price,
         saved=bool(r.local_saved or r.favorited or r.source == "favorite"),
         location=r.location, condition=r.condition, free_shipping=r.free_shipping,
         seller_nick=r.seller_nick, watch_name=r.watch_name, pic_url=r.pic_url,
@@ -274,6 +279,7 @@ def itemrow_to_fav(r: ItemRow) -> FavoriteOut:
         item_id=r.item_id, title=r.title, url=r.url, price=r.latest_price,
         original_price=r.original_price,
         attrs=json.loads(r.attrs) if r.attrs else None,
+        promo_price=r.promo_price, list_price=r.list_price,
         saved=bool(r.local_saved or r.favorited or r.source == "favorite"),
         reduce_price=r.reduce_price or 0.0, location=r.location, shared_folder_key=r.shared_folder_key,
         condition=r.condition, free_shipping=r.free_shipping, seller_nick=r.seller_nick,
