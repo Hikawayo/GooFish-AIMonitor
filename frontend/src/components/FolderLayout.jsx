@@ -68,7 +68,7 @@ export default function FolderLayout({ folders, children }) {
   return (
     <div className="folder-layout" data-collapsed={collapsed ? '1' : '0'}
       style={{ '--folder-w': `${collapsed ? 0 : width}px` }}>
-      <div className="folder-results">{children}</div>
+      {children}
       <div
         className="folder-split"
         role="separator"

@@ -105,7 +105,13 @@ export default function App() {
   // 失败提示条: 关掉后只在下一轮新失败时再出现
   const [dismissedError, setDismissedError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [railOpen, setRailOpen] = useState(() => localStorage.getItem('xy-rail') !== '0')
+  // 手机上实时事件是底部抽屉: 默认收起, 桌面上默认展开
+  const [railOpen, setRailOpen] = useState(() => {
+    const saved = localStorage.getItem('xy-rail')
+    if (saved === '0') return false
+    if (saved === '1') return true
+    return window.innerWidth > 1180
+  })
   const [eventTab, setEventTab] = useState('all')
   const [watchList, setWatchList] = useState([])
   const [runMenu, setRunMenu] = useState(false)
@@ -273,7 +279,7 @@ export default function App() {
           </button>
         </div>
         <button
-          className={'icon-btn' + (railOpen ? ' on' : '')}
+          className={'icon-btn rail-toggle' + (railOpen ? ' on' : '')}
           title={railOpen ? '收起实时事件栏' : '展开实时事件栏'}
           onClick={toggleRail}
         >
@@ -403,7 +409,8 @@ export default function App() {
         </Routes>
       </div>
 
-      {/* 右栏 · 实时事件(可收起 + 按类型分 tab) */}
+      {/* 右栏 · 实时事件(可收起 + 按类型分 tab; 手机上变底部抽屉) */}
+      {railOpen && <div className="rail-mask" onClick={toggleRail} aria-hidden="true" />}
       <div className="rail">
         <div className="rt">
           <i className="ti ti-activity" />

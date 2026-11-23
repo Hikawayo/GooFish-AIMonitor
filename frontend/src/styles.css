@@ -485,6 +485,7 @@ button { font-family: inherit; }
 /* ============================================================
    右栏 · 实时事件
    ============================================================ */
+.rail-mask { display: none; }
 .rail { background: var(--s1); border-left: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; overflow: hidden; }
 .rt { font-size: 13px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 .rt i { color: var(--acc); font-size: 16px; }
@@ -687,7 +688,22 @@ button { font-family: inherit; }
   .main { padding: 16px 12px 24px; }
   .settings-header { top: -16px; }
   .folder-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .folder-nav, .folder-results { grid-area: auto; }
+  /* 手机: 文件夹在最上面, 结果在下面(桌面是右栏); 列也要重置, 否则会撑出隐式第三列 */
+  .folder-nav { grid-area: 1 / 1; }
+  .folder-results { grid-area: 2 / 1; }
+  /* 实时事件在手机上是底部抽屉: 顶栏铃铛打开, 点遮罩或 × 收起 */
+  .rail {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    max-height: 72vh; border-left: none; border-top: 1px solid var(--line);
+    border-radius: 14px 14px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+    box-shadow: 0 -12px 32px #0000002e;
+  }
+  .rail-mask { display: block; position: fixed; inset: 0; z-index: 55; background: #0006; }
+  .top { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .top .rail-toggle { display: flex; grid-area: 1 / 2; }
+  .run-wrap { grid-area: 1 / 3; }
+  .skins { grid-area: 2 / 1 / 2 / 3; }
+  .live { grid-area: 2 / 3; }
   /* 手机上文件夹是上方一行, 不需要分割条, 之前的收起状态也不生效 */
   .folder-split { display: none; }
   .folder-layout[data-collapsed='1'] .folder-nav { display: flex; }
