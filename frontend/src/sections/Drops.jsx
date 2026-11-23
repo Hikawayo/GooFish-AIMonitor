@@ -14,7 +14,6 @@ export default function Drops({ refreshKey, onToast }) {
   const [visibility, setVisibility] = useState('mine')
   const [folderId, setFolderId] = useState('')
   const [sortOrder, setSortOrder] = useState(DEFAULT_SORT)
-  const shotRef = useRef(null)   // 快照范围: 标题 + 总趋势图 + 商品卡
   const sortTouched = useRef(false)
   const [cfg, setCfg] = useState(null)
   const [loadError, setLoadError] = useState('')
@@ -74,12 +73,12 @@ export default function Drops({ refreshKey, onToast }) {
       {error && <p role="alert" className="test-err">{error}</p>}
       <FolderLayout folders={<Folders choices={choices} selected={selected?.id} onSelect={setFolderId}
         visibility={visibility} onVisibility={setVisibility} counts={counts} />}>
-        <div className="folder-results" ref={shotRef}>
+        <div className="folder-results">
       {selected && <div className="folder-heading">
         <h2>{selected.name}</h2>
         <div className="folder-tools">
           <ItemSort value={sortOrder} onChange={changeSort} onMakeDefault={makeSortDefault} />
-          <SnapshotButton target={shotRef} name={selected.name} onToast={onToast} />
+          <SnapshotButton name={selected.name} watches={selected.watches} items={shown} onToast={onToast} />
         </div>
       </div>}
       {selected?.watches?.length > 0 && (

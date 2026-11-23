@@ -262,7 +262,6 @@ button { font-family: inherit; }
 /* 标题右侧: 排序 + 快照 */
 .folder-tools { display: flex; align-items: center; gap: 8px; }
 .snapshot-btn { flex: none; }
-.snapping .snapshot-btn, .snapping .trend-grip, .snapping .trend-hit, .snapping .trend-bg { visibility: hidden; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .snapshot-btn i.ti-loader-2 { animation: spin .9s linear infinite; }
 .folder-heading h2 { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
