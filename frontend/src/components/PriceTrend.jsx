@@ -92,8 +92,10 @@ function Chart({ data, width, mode, base, range, onRange, hover, onHover, colors
     drag.current = null
   }
 
+  // fill 用属性写死: 截图时克隆进 SVG 会丢 CSS 类的透明填充, 变成黑色粗边
   const hit = (edge, cursor) => ({
     className: 'trend-hit',
+    fill: 'transparent',
     style: { cursor },
     onPointerDown: begin(edge),
   })
@@ -172,10 +174,10 @@ function Chart({ data, width, mode, base, range, onRange, hover, onHover, colors
       <line x1={PAD.left} x2={width - PAD.right} y1={y(pHigh)} y2={y(pHigh)} className="trend-handle" stroke={colors.min} strokeDasharray="5 4" />
       <line x1={x(t0)} x2={x(t0)} y1={PAD.top} y2={HEIGHT - PAD.bottom} className="trend-handle" stroke={colors.min} strokeDasharray="5 4" />
       <line x1={x(t1)} x2={x(t1)} y1={PAD.top} y2={HEIGHT - PAD.bottom} className="trend-handle" stroke={colors.min} strokeDasharray="5 4" />
-      <rect className="trend-grip" x={PAD.left + plotW / 2 - 14} y={y(pLow) - 3} width={28} height={6} rx={3} />
-      <rect className="trend-grip" x={PAD.left + plotW / 2 - 14} y={y(pHigh) - 3} width={28} height={6} rx={3} />
-      <rect className="trend-grip" x={x(t0) - 3} y={PAD.top + plotH / 2 - 14} width={6} height={28} rx={3} />
-      <rect className="trend-grip" x={x(t1) - 3} y={PAD.top + plotH / 2 - 14} width={6} height={28} rx={3} />
+      <rect className="trend-grip" x={PAD.left + plotW / 2 - 14} y={y(pLow) - 3} width={28} height={6} rx={3} fill={colors.min} />
+      <rect className="trend-grip" x={PAD.left + plotW / 2 - 14} y={y(pHigh) - 3} width={28} height={6} rx={3} fill={colors.min} />
+      <rect className="trend-grip" x={x(t0) - 3} y={PAD.top + plotH / 2 - 14} width={6} height={28} rx={3} fill={colors.min} />
+      <rect className="trend-grip" x={x(t1) - 3} y={PAD.top + plotH / 2 - 14} width={6} height={28} rx={3} fill={colors.min} />
 
       <rect x={PAD.left} y={y(pLow) - 9} width={plotW} height={18} {...hit('bottom', 'ns-resize')} />
       <rect x={PAD.left} y={y(pHigh) - 9} width={plotW} height={18} {...hit('top', 'ns-resize')} />
