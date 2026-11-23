@@ -308,6 +308,14 @@ def mute_item(s: Session, item_id: str, until: datetime) -> None:
     s.commit()
 
 
+def is_rejected(s: Session, item_id: str) -> bool:
+    """AI 判过「不通过」的: 明确 rec_ok=False, 或人工标成 rejected。"""
+    row = s.scalar(select(ItemRow).where(ItemRow.item_id == item_id))
+    if row is None:
+        return False
+    return row.rec_status == "rejected" or row.rec_ok is False
+
+
 def is_muted(s: Session, item_id: str) -> bool:
     row = s.get(ItemRow, item_id)
     return bool(row and row.muted_until and row.muted_until > _now())

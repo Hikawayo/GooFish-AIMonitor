@@ -152,3 +152,21 @@ def test_promo_cleared_when_discount_disappears(monkeypatch):
     service.refresh_local_favorites(None, s, Settings(liveness_max_checks=5))
     row = s.get(ItemRow, "p2")
     assert row is not None and row.latest_price == 3400 and row.promo_price is None
+
+def test_rejected_items_are_marked_rejected():
+    """AI 判过不通过的, 扫描时不再更新价格。"""
+    from xianyu_crawler.storage import repo
+    from xianyu_crawler.storage.db import make_session
+    from xianyu_crawler.storage.orm import ItemRow
+
+    s = make_session("sqlite:///:memory:", create=True)
+    repo.create_recommendation(s, Item(item_id="r1", title="票", url="u", price=100), "票", ok=False)
+    repo.create_recommendation(s, Item(item_id="r2", title="票", url="u", price=200), "票", ok=True)
+
+    assert repo.is_rejected(s, "r1") is True
+    assert repo.is_rejected(s, "r2") is False
+    assert repo.is_rejected(s, "missing") is False
+
+    repo.set_rec_status(s, "r2", "rejected")
+    assert repo.is_rejected(s, "r2") is True
+    assert s.get(ItemRow, "r2") is not None
