@@ -50,6 +50,7 @@
 - **为什么不用 Actions**：仓库虽然是公开的（服务器能匿名 `git ls-remote`），但 Actions 要 SSH 到服务器，必须在 GitHub 里存 3 个 repo secret（host/user/key）。而服务器自己就能拉代码，等于少一层、少一堆密钥、也不烧 Actions 分钟。Actions 唯一的额外价值是「推送后立刻部署 + 有运行日志」；延迟由 2 分钟轮询顶上。
 - **安全边界**：构建失败不重启旧容器（保留上一版）；`flock /tmp/xy-deploy.lock` 与 `scripts/deploy.ps1` 共用一把锁，手动部署与自动更新不会同时构建；`data/` 是 gitignore，`reset --hard` 不碰。
 - **代价**：推送后最多 2 分钟才上线；若正好在抓取中被重启，那一轮抓取会中断（定时任务下一轮会补）。
+- **已固化为流程**：AGENTS.md「部署」改成「默认只 push，不手动部署」，并写明只有需要立刻生效/紧急回滚才跑 `deploy.ps1`。线上实测：timer `active` + `enabled`，服务端 HEAD 与本地一致 `c3696d6`，journal 有「发现新提交 → 已上线 caddy=200」。
 
 ## 2026-11-23 售出商品可见性 / 优惠价被覆盖 / 扫描跳过已失效
 

@@ -139,12 +139,27 @@ SQLite 读回的 datetime 一律 **naive**。统一约定：库里存 **naive UT
 
 ## 部署
 
+**默认只 `git push`，不手动部署。** 服务器上有 systemd 定时任务 `xy-autoupdate.timer`（每 2 分钟）执行 [`scripts/server-autoupdate.sh`](scripts/server-autoupdate.sh)：`git fetch origin main` → `reset --hard` → `docker compose build` → `up -d` → 探活。push 后约 2 分钟自动上线。
+
+流程固定为：
+
+1. 改代码 → 本地 `verify.ps1` 一行确认。
+2. `git commit` + `git push`（一次批量命令搞定）。
+3. **结束这一步**。不要为了「确保上线」再去跑 `deploy.ps1`——那纯属浪费一跳调用（约 1M token），定时任务会做同一件事。
+4. 节点收尾时用 `data/PROGRESS.md` 记录，必要时用下面一行看线上状态：
+
+```bash
+ssh <host> "systemctl is-active xy-autoupdate.timer; journalctl -u xy-autoupdate.service -n 5 --output=cat; cd /srv/GooFish-AIMonitor && git rev-parse --short HEAD"
+```
+
+只有在需要**立刻**生效（用户正等着看、或紧急回滚）时才手动部署，且它和定时任务共用 `/tmp/xy-deploy.lock` 的 `flock`，不会互相踩：
+
 ```powershell
 pwsh -File scripts/deploy.ps1            # 打包→scp→构建→重启→探活, 只回一行
 pwsh -File scripts/deploy.ps1 -NoBuild   # 只同步 git + 重启(纯文档改动)
 ```
 
-服务器地址与密钥在 `data/deploy.env`（gitignore），不在仓库里。手工作业流程如下，脚本就是它的固化：
+自动更新的安全边界：构建失败就不 `up`，旧容器继续跑；`data/` 被 gitignore，`reset --hard` 不碰数据；重启瞬间正在跑的采集会中断，下一轮定时任务自动补。服务器地址与密钥在 `data/deploy.env`（gitignore），不在仓库里。手工作业流程如下，脚本就是它的固化：
 
 ```bash
 docker build -t xianyu-console:latest \
