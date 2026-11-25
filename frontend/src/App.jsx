@@ -533,17 +533,19 @@ export default function App() {
           ))}
         </div>
 
-        <Routes>
-          <Route path="/" element={<Navigate to="/recommendations" replace />} />
-          <Route
-            path="/recommendations"
-            element={<Recommendations refreshKey={refreshKey} onToast={showToast} login={login} />}
-          />
-          <Route path="/favorites" element={<Drops refreshKey={refreshKey} onToast={showToast} />} />
-          <Route path="/watches" element={<Watches />} />
-          <Route path="/settings" element={<Settings status={status} />} />
-          <Route path="*" element={<Navigate to="/recommendations" replace />} />
-        </Routes>
+        <div className="route-stage" key={pathname}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/recommendations" replace />} />
+            <Route
+              path="/recommendations"
+              element={<Recommendations refreshKey={refreshKey} onToast={showToast} login={login} />}
+            />
+            <Route path="/favorites" element={<Drops refreshKey={refreshKey} onToast={showToast} />} />
+            <Route path="/watches" element={<Watches />} />
+            <Route path="/settings" element={<Settings status={status} />} />
+            <Route path="*" element={<Navigate to="/recommendations" replace />} />
+          </Routes>
+        </div>
       </div>
 
       {/* 右栏 · 实时事件(可收起 + 按类型分 tab; 手机上变底部抽屉) */}
