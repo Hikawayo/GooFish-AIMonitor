@@ -738,3 +738,284 @@ button { font-family: inherit; }
   .trend-modes { order: 3; width: 100%; }
   .trend-modes button { flex: 1; text-align: center; }
 }
+
+/* ============================================================
+   同工作室家族风（#00AABB 青瓷通透版 · 乐桃 nendo 骨架）
+   零弥散阴影 + 青釉粗描边 + 对角非对称圆角 + 手机端底部浮岛同步显隐
+   ============================================================ */
+#app {
+  background:
+    radial-gradient(circle 340px at 96% -40px, var(--s2) 0 99%, transparent 100%),
+    radial-gradient(circle 260px at -60px 85%, var(--soft) 0 99%, transparent 100%),
+    var(--bg);
+}
+
+.top {
+  background: var(--bg);
+  border-bottom: 2px solid var(--line);
+}
+.logo { color: var(--fg-deep, var(--fg)); font-weight: 700; }
+.logo .mk {
+  width: 28px; height: 28px;
+  border-radius: 0px 10px;
+  background: var(--acc);
+  color: var(--af);
+}
+.run {
+  border-radius: var(--rad-cta, 0px 14px);
+  font-weight: 700;
+  border: 0;
+}
+.icon-btn,
+.notice-btn {
+  border: 2px solid var(--line2);
+  border-radius: var(--rad, 0px 18px);
+  background: var(--s1);
+}
+.icon-btn:hover,
+.notice-btn:hover {
+  background: var(--soft);
+  border-color: var(--acc);
+  color: var(--acc-ink, var(--acc));
+}
+.icon-btn.on {
+  background: var(--acc-mid, var(--acc));
+  border-color: var(--acc-mid, var(--acc));
+  color: var(--af);
+}
+
+/* 桌面左侧栏：淡青瓷面 + 非对称导航芯片 */
+.side {
+  background: var(--s2);
+  border-right: 2px solid var(--line);
+  gap: 6px;
+}
+.nav {
+  border: 2px solid transparent;
+  border-radius: var(--rad, 0px 18px);
+  font-weight: 600;
+}
+.nav:hover {
+  background: var(--s1);
+  border-color: var(--line2);
+}
+.nav.active {
+  background: var(--acc-mid, var(--acc));
+  border-color: var(--acc-mid, var(--acc));
+  color: var(--af);
+}
+.nav.active i { color: var(--af); }
+.nav.active .cnt {
+  background: rgba(255, 255, 255, 0.24);
+  color: var(--af);
+}
+.acct {
+  background: var(--s1);
+  border: 2px solid var(--line2);
+  border-radius: var(--rad, 0px 18px);
+}
+
+/* 卡片、条件行、文件夹面板、弹窗：零阴影 + 粗描边 + 对角非对称圆角 */
+.card,
+.watch-row,
+.trend-box,
+.settings-card,
+.modal {
+  background: var(--s1);
+  border: 2.5px solid var(--line2);
+  border-radius: var(--rad-card, 0px 30px);
+  box-shadow: none;
+}
+.card.rec:hover {
+  border-color: var(--acc);
+  transform: none;
+}
+.card .thumb { border-radius: 0px 22px; }
+.rec-title { color: var(--fg-deep, var(--fg)); }
+.price,
+.rec-price { color: var(--acc); font-weight: 700; }
+
+.folder-nav {
+  background: var(--s2);
+  border: 2px solid var(--line);
+  border-radius: var(--rad-card, 0px 30px);
+  padding: 12px;
+}
+.folder-nav button {
+  border: 2px solid transparent;
+  border-radius: var(--rad, 0px 18px);
+  font-weight: 600;
+}
+.folder-nav button[aria-pressed='true'] {
+  background: var(--acc-mid, var(--acc));
+  border-color: var(--acc-mid, var(--acc));
+  color: var(--af);
+}
+
+.btn {
+  border-radius: var(--rad, 0px 18px);
+  font-weight: 600;
+}
+.btn-primary {
+  border-radius: var(--rad-cta, 0px 14px);
+  font-weight: 700;
+}
+.btn-ghost {
+  background: var(--s1);
+  border: 2px solid var(--line2);
+  color: var(--fg);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--soft);
+  border-color: var(--acc);
+  color: var(--acc-ink, var(--acc));
+}
+input,
+select,
+textarea {
+  border-radius: var(--rad-in, 6px);
+}
+
+.rail {
+  background: var(--s2);
+  border-left: 2px solid var(--line);
+}
+.run-menu {
+  border: 2px solid var(--line2);
+  border-radius: var(--rad, 0px 18px);
+  box-shadow: 0 10px 28px rgba(31, 58, 64, 0.14);
+}
+
+/* ============================================================
+   手机端适配（<= 760px）：
+   1. 取消窄屏 62px 左侧栏，主导航 .side 改为底部浮岛
+   2. 顶栏 .top 固定顶部，与底部浮岛同步随滚动方向隐藏/显示（停手继承状态）
+   ============================================================ */
+@media (max-width: 760px) {
+  #app,
+  #app[data-collapsed='1'],
+  #app[data-rail='0'],
+  #app[data-collapsed='1'][data-rail='0'] {
+    display: block;
+    position: relative;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .top {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 38;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    min-height: 54px;
+    background: var(--bg);
+    border-bottom: 2px solid var(--line);
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+  #app[data-mobile-nav-hidden='1'] .top {
+    transform: translateY(calc(-100% - 6px));
+  }
+  .top .grow { display: block; flex: 1; }
+  .top .live { display: none; }
+  .top .skins { gap: 5px; }
+  .top .swatch { width: 18px; height: 18px; }
+  .top .notice-btn { width: 30px; height: 30px; }
+  .top .icon-btn.rail-toggle { display: flex; width: 32px; height: 32px; }
+  .logo { font-size: 14.5px; gap: 7px; white-space: nowrap; }
+  .logo .mk { width: 24px; height: 24px; font-size: 13px; }
+  .run { padding: 6px 12px; font-size: 12.5px; }
+
+  /* 底部浮岛导航栏 */
+  .side {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    z-index: 42;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 5px;
+    background: var(--s1);
+    border: 2px solid var(--line2);
+    border-right: 2px solid var(--line2);
+    border-radius: 0px 22px;
+    box-shadow: 0 8px 24px rgba(31, 58, 64, 0.14);
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+  #app[data-mobile-nav-hidden='1'] .side {
+    transform: translateY(calc(100% + 28px + env(safe-area-inset-bottom, 0px)));
+  }
+  .side .sp,
+  .side .collapse,
+  .side .acct {
+    display: none;
+  }
+  .side .nav {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 4px;
+    border-radius: 0px 15px;
+    position: relative;
+  }
+  .side .nav .label {
+    display: block;
+    font-size: 11px;
+    line-height: 1.1;
+  }
+  .side .nav i { font-size: 17px; }
+  .side .nav .cnt {
+    display: inline-flex;
+    position: absolute;
+    top: 3px;
+    right: 8px;
+    padding: 0 5px;
+    min-width: 16px;
+    height: 16px;
+    font-size: 10px;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .main {
+    height: 100dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 66px 12px calc(86px + env(safe-area-inset-bottom, 0px));
+  }
+  .settings-header { top: -8px; }
+  .folder-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .folder-nav { grid-area: 1 / 1; padding: 10px; border-radius: 0px 22px; }
+  .folder-results { grid-area: 2 / 1; }
+  .folder-split { display: none; }
+  .folder-layout[data-collapsed='1'] .folder-nav { display: flex; }
+  .folder-list { flex-direction: row; overflow-x: auto; gap: 6px; }
+  .folder-list button { flex: none; max-width: 160px; }
+
+  .rail {
+    display: flex;
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    z-index: 60;
+    max-height: 72vh;
+    border: 2.5px solid var(--line2);
+    border-radius: 0px 28px;
+    padding: 14px;
+    box-shadow: 0 12px 32px rgba(31, 58, 64, 0.22);
+  }
+  .rail-mask { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(15, 23, 25, 0.42); }
+}
+

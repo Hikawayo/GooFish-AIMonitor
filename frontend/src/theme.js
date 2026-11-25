@@ -5,8 +5,8 @@
  * 因为漏配某个颜色而出现不可读的按钮或边框。选择存在 localStorage, 只影响本人浏览器。
  */
 
-export const LIGHT = { bg: '#f6f9fc', fg: '#0a2540', acc: '#00aabb' }
-export const DARK = { bg: '#08090a', fg: '#f7f8f8', acc: '#ffffff' }
+export const LIGHT = { bg: '#f7faf9', fg: '#355359', acc: '#00aabb' }
+export const DARK = { bg: '#0f1719', fg: '#e5f0f2', acc: '#38beca' }
 
 export const PRESETS = [
   { key: 'light', name: '浅色', ...LIGHT },
@@ -56,22 +56,33 @@ function contrast(a, b) {
   return (high + 0.05) / (low + 0.05)
 }
 
-/** 主题 → #app 的 CSS 变量。文字压在强调色上时, 黑白哪个更清楚就用哪个。 */
+/** 主题 → #app 的 CSS 变量。浅色采用海盐白瓷四阶面 + 青釉描边 + 零投影；深色与自定义沿用同一推导逻辑。 */
 export function themeVars(palette) {
   const dark = luminance(palette.bg) < 0.3
+  const paper = dark ? mix(palette.bg, palette.fg, 0.06) : '#ffffff'
+  const beige = dark ? mix(palette.bg, palette.fg, 0.11) : mix(palette.bg, palette.acc, 0.07)
+  const sand = dark ? mix(palette.bg, palette.fg, 0.16) : mix(palette.bg, palette.acc, 0.14)
+  const borderCeramic = dark ? alpha(palette.acc, 0.34) : mix(palette.acc, '#ffffff', 0.65)
   return {
     '--bg': palette.bg,
-    '--s1': mix(palette.bg, palette.fg, 0.04),
-    '--s2': mix(palette.bg, palette.fg, 0.08),
+    '--s1': paper,
+    '--s2': beige,
+    '--sand': sand,
     '--fg': palette.fg,
+    '--fg-deep': dark ? palette.fg : mix(palette.fg, '#0c1c20', 0.35),
     '--dim': mix(palette.fg, palette.bg, 0.42),
-    '--line': alpha(palette.fg, 0.1),
-    '--line2': alpha(palette.fg, 0.2),
+    '--line': dark ? alpha(palette.fg, 0.14) : sand,
+    '--line2': borderCeramic,
     '--acc': palette.acc,
-    '--af': contrast(palette.acc, '#ffffff') >= contrast(palette.acc, '#111111') ? '#ffffff' : '#111111',
-    '--soft': alpha(palette.acc, dark ? 0.18 : 0.13),
-    '--rad': '8px',
-    '--sh': dark ? 'none' : '0 1px 3px rgba(10, 37, 64, .06)',
+    '--acc-mid': dark ? mix(palette.acc, '#ffffff', 0.12) : mix(palette.acc, '#ffffff', 0.22),
+    '--acc-ink': dark ? mix(palette.acc, '#ffffff', 0.2) : mix(palette.acc, '#002c32', 0.25),
+    '--af': luminance(palette.acc) < 0.44 ? '#ffffff' : (contrast(palette.acc, '#ffffff') >= contrast(palette.acc, '#111111') ? '#ffffff' : '#111111'),
+    '--soft': dark ? alpha(palette.acc, 0.2) : mix(palette.acc, '#ffffff', 0.89),
+    '--rad': '0px 18px',
+    '--rad-card': '0px 30px',
+    '--rad-cta': '0px 14px',
+    '--rad-in': '6px',
+    '--sh': 'none',
   }
 }
 

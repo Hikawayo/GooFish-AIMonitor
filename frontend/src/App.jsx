@@ -215,9 +215,66 @@ export default function App() {
     return () => clearInterval(t)
   }, [])
 
+  const [mobileNavHidden, setMobileNavHidden] = useState(false)
+  const mainRef = useRef(null)
+
   useEffect(() => {
     api.watches().then(setWatchList).catch(() => {})
   }, [refreshKey, pathname])
+
+  // 路由切换时恢复移动导航可见并回到顶部
+  useEffect(() => {
+    setMobileNavHidden(false)
+    if (mainRef.current) mainRef.current.scrollTop = 0
+  }, [pathname])
+
+  // 仅手机端：向上滑信息流隐藏顶栏+底部浮岛，向下滑显示，停止继承当前状态
+  useEffect(() => {
+    const el = mainRef.current
+    if (!el || typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(max-width: 760px)')
+    let lastTop = el.scrollTop || 0
+    let hidden = false
+    const THRESHOLD = 10
+
+    const onScroll = () => {
+      if (!mq.matches) {
+        if (hidden) { hidden = false; setMobileNavHidden(false) }
+        lastTop = el.scrollTop || 0
+        return
+      }
+      const top = Math.max(0, el.scrollTop || 0)
+      if (top <= 8) {
+        if (hidden) { hidden = false; setMobileNavHidden(false) }
+        lastTop = top
+        return
+      }
+      const delta = top - lastTop
+      if (Math.abs(delta) < THRESHOLD) return
+      if (delta > 0 && !hidden) {
+        hidden = true
+        setMobileNavHidden(true)
+      } else if (delta < 0 && hidden) {
+        hidden = false
+        setMobileNavHidden(false)
+      }
+      lastTop = top
+    }
+
+    const onMediaChange = () => {
+      if (!mq.matches && hidden) {
+        hidden = false
+        setMobileNavHidden(false)
+      }
+    }
+
+    el.addEventListener('scroll', onScroll, { passive: true })
+    mq.addEventListener?.('change', onMediaChange)
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      mq.removeEventListener?.('change', onMediaChange)
+    }
+  }, [])
 
   const run = async (watch) => {
     setRunMenu(false)
@@ -276,7 +333,13 @@ export default function App() {
     events === null ? null : activeTab.types ? events.filter((e) => activeTab.types.includes(e.type)) : events
 
   return (
-    <div id="app" style={themeVars(palette)} data-collapsed={collapsed ? '1' : '0'} data-rail={railOpen ? '1' : '0'}>
+    <div
+      id="app"
+      style={themeVars(palette)}
+      data-collapsed={collapsed ? '1' : '0'}
+      data-rail={railOpen ? '1' : '0'}
+      data-mobile-nav-hidden={mobileNavHidden ? '1' : '0'}
+    >
       {/* 顶栏 */}
       <div className="top">
         <div className="logo">
@@ -408,7 +471,7 @@ export default function App() {
       </div>
 
       {/* 主区 */}
-      <div className="main">
+      <div className="main" ref={mainRef}>
         {running && percent !== null && (
           <div className="run-progress" role="progressbar" aria-valuenow={percent}
             aria-valuemin={0} aria-valuemax={100} aria-label={`抓取进度 ${percent}%`}>
