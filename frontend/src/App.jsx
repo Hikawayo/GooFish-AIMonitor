@@ -8,7 +8,7 @@ import Watches from './sections/Watches'
 import Settings from './sections/Settings'
 import ThemeEditor from './components/ThemeEditor'
 import Notice, { NOTICE_VERSION } from './components/Notice'
-import { PRESETS, loadTheme, paletteOf, saveTheme, themeVars } from './theme'
+import { QUICK_PRESETS, loadTheme, paletteOf, saveTheme, themeVars } from './theme'
 
 const NAV = [
   ['/recommendations', '推荐', 'ti-sparkles', 'pending'],
@@ -367,7 +367,7 @@ export default function App() {
           >
             <i className="ti ti-info-circle" />
           </button>
-          {PRESETS.map((preset) => (
+          {QUICK_PRESETS.map((preset) => (
             <button
               key={preset.key}
               className={'swatch' + (theme.key === preset.key ? ' on' : '')}
@@ -379,9 +379,9 @@ export default function App() {
             />
           ))}
           <button
-            className={'swatch swatch-add' + (theme.key === 'custom' ? ' on' : '')}
-            title="自定义主题"
-            aria-label="自定义主题"
+            className={'swatch swatch-add' + (theme.key === 'custom' || !QUICK_PRESETS.some((p) => p.key === theme.key) ? ' on' : '')}
+            title="全部主题与自定义"
+            aria-label="全部主题与自定义"
             aria-pressed={theme.key === 'custom'}
             onClick={() => setThemeOpen(true)}
           >
@@ -586,7 +586,9 @@ export default function App() {
 
       {themeOpen && (
         <ThemeEditor
+          activeKey={theme.key}
           initial={theme.custom ?? palette}
+          onPickPreset={chooseTheme}
           onSave={saveCustomTheme}
           onClose={() => setThemeOpen(false)}
         />

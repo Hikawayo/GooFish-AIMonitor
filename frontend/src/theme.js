@@ -9,15 +9,28 @@ export const LIGHT = { bg: '#f7faf9', fg: '#355359', acc: '#00aabb' }
 export const DARK = { bg: '#0f1719', fg: '#e5f0f2', acc: '#38beca' }
 
 export const PRESETS = [
-  { key: 'light', name: '浅色', ...LIGHT },
-  { key: 'dark', name: '深色', ...DARK },
+  { key: 'light', name: '青瓷', ...LIGHT },
+  { key: 'dark', name: '深海青瓷', ...DARK },
+  { key: 'peach-nendo', name: '乐桃奶油', bg: '#fff9f3', fg: '#6d564a', acc: '#e65080' },
+  { key: 'catppuccin-latte', name: 'Catppuccin Latte', bg: '#eff1f5', fg: '#4c4f69', acc: '#179299' },
+  { key: 'catppuccin-mocha', name: 'Catppuccin Mocha', bg: '#1e1e2e', fg: '#cdd6f4', acc: '#89b4fa' },
+  { key: 'tokyo-night', name: 'Tokyo Night', bg: '#1a1b26', fg: '#c0caf5', acc: '#2ac3de' },
+  { key: 'nord-light', name: 'Nord Light', bg: '#eceff4', fg: '#3b4252', acc: '#5e81ac' },
+  { key: 'nord-dark', name: 'Nord Dark', bg: '#2e3440', fg: '#e5e9f0', acc: '#88c0d0' },
+  { key: 'gruvbox-light', name: 'Gruvbox Light', bg: '#fbf1c7', fg: '#504945', acc: '#458588' },
+  { key: 'gruvbox-dark', name: 'Gruvbox Dark', bg: '#282828', fg: '#ebdbb2', acc: '#83a598' },
+  { key: 'rose-pine-dawn', name: 'Rosé Pine Dawn', bg: '#faf4ed', fg: '#575279', acc: '#286983' },
+  { key: 'everforest-light', name: 'Everforest', bg: '#fdf6e3', fg: '#5c6a72', acc: '#35a77c' },
+  { key: 'kanagawa', name: 'Kanagawa', bg: '#1f1f28', fg: '#dcd7ba', acc: '#7e9cd8' },
 ]
+
+export const QUICK_PRESETS = PRESETS.slice(0, 3)
 
 const STORAGE_KEY = 'xy-theme-key'
 const STORAGE_CUSTOM = 'xy-theme-custom'
 const LEGACY_KEY = 'xy-skin'
 // 旧版五套皮肤 → 现在的浅/深两套(用户看不出变化, 但不会掉成无样式)
-const LEGACY = { linear: 'dark', vercel: 'dark', supabase: 'dark', stripe: 'light', apple: 'light' }
+const LEGACY = { linear: 'dark', vercel: 'dark', supabase: 'dark', stripe: 'light', apple: 'light', 'ceramic-teal': 'light', 'ceramic-dark': 'dark' }
 
 const isHex = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
 
@@ -110,9 +123,10 @@ export function loadTheme() {
   } catch {
     /* 隐私模式读不到, 按新用户处理 */
   }
+  const hasPreset = PRESETS.some((p) => p.key === stored)
   const key = stored === 'custom'
     ? (custom ? 'custom' : 'light')
-    : (stored === 'light' || stored === 'dark' ? stored : LEGACY[stored] || 'light')
+    : (hasPreset ? stored : LEGACY[stored] || 'light')
   return { key, custom }
 }
 

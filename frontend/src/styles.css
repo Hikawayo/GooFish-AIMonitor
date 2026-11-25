@@ -1041,4 +1041,45 @@ body {
   .route-stage { animation: none !important; }
 }
 
+.theme-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
+  gap: 7px;
+  margin-bottom: 14px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.theme-preset-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 2px solid var(--line2);
+  border-radius: var(--rad, 0px 18px);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.theme-preset-chip:hover {
+  border-color: var(--acc);
+  background: var(--soft);
+}
+.theme-preset-chip.on {
+  border-color: var(--acc);
+  background: var(--acc);
+  color: var(--af);
+}
+.theme-preset-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(127, 127, 127, 0.35);
+  flex: none;
+}
+
+
 

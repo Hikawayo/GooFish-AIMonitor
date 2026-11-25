@@ -4,8 +4,8 @@
 
 ## 当前状态
 
-- **更新时间**：2026-11-24（新增同工作室家族风 `#00AABB` 青瓷版 + 手机端底部浮岛与同步滚动显隐改造）
-- **本轮 UI 与移动端改造（2026-11-24）**：按乐桃 nendo 骨架与 `#00AABB` 青瓷色系重构默认浅色主题（海盐白瓷 `#f7faf9` / 淡青瓷 `#e6f4f5` / 纯白卡片 `#ffffff` + 深青墨正文 `#355359` + 青釉粗描边 + 对角非对称圆角 + 零阴影），保留深色与自定义三色推导逻辑，未新增多余文案。手机端（`<= 760px`）取消 62px 左侧栏，主导航 `.side` 改为底部浮岛，顶栏 `.top` 与底部浮岛随 `.main` 滚动方向同步隐藏/显示（停手继承状态，PC 端不变）。改动位置：`frontend/src/theme.js`、`frontend/src/styles.css`、`frontend/src/App.jsx`。验证：Node ESM 实测 `themeVars(LIGHT / DARK / custom)` 通过；当前离线环境无 `node_modules` 且禁用远程 `npm`，尚未执行 `npm run build` / `pytest` / `pyright`，待联网或部署构建补跑。
+- **更新时间**：2026-11-24（新增 13 套精选预设主题切换 + 淡入切换防抖 + 手机端底部浮岛）
+- **本轮 UI、移动端与多主题改造（2026-11-24）**：按乐桃 nendo 骨架与 `#00AABB` 青瓷色系重构默认浅色主题（海盐白瓷 `#f7faf9` / 淡青瓷 `#e6f4f5` / 纯白卡片 `#ffffff` + 深青墨正文 `#355359` + 青釉粗描边 + 对角非对称圆角 + 零阴影），保留自定义三色推导逻辑，未新增多余文案。手机端（`<= 760px`）取消 62px 左侧栏，主导航 `.side` 改为底部浮岛，顶栏 `.top` 与底部浮岛随 `.main` 滚动方向同步隐藏/显示（停手继承状态，PC 端不变）；路由切换补齐淡入过渡与 `scrollbar-gutter: stable` 防抖；主题预设扩展至 13 套（青瓷、深海青瓷、乐桃奶油、Catppuccin Latte/Mocha、Tokyo Night、Nord Light/Dark、Gruvbox Light/Dark、Rosé Pine Dawn、Everforest、Kanagawa），顶栏保留 3 个快捷圆点 + 「＋」弹窗任选并保留三色自定义。改动位置：`frontend/src/theme.js`、`frontend/src/components/ThemeEditor.jsx`、`frontend/src/styles.css`、`frontend/src/App.jsx`。验证：Node ESM 实测全部 13 套预设与自定义三色 `themeVars()` 通过；当前离线环境无 `node_modules` 且禁用远程 `npm`，尚未执行 `npm run build` / `pytest` / `pyright`，待联网或部署构建补跑。
 - **阶段**：阶段二的多人访问、监控文件夹、公开/私密隔离、推荐/收藏筛选已上线。本轮上线人工审核模式与单商品价格走势，主题重点色改为 `#00AABB`。
 - **线上入口**：Caddy `8454` 继续接入 `8445` 统一登录。应用 `goofish` 已允许 SSO 成员，Caddy 把统一登录签发的应用专用票据传给 FastAPI。匿名请求（含 `/`）返回 `401`。容器仍绑定 `127.0.0.1:18080`。
 - **数据归属**：原管理员沿用既有 SQLite、闲鱼账户和模型配置；服务器保留了 1 条监控、28 条待审、14 条收藏。其他成员的 SQLite、扫码状态、Key、定时任务和收藏按账号隔离。Key 只写入自己的配置，成员接口采用管理员配置的 HTTPS 地址范围，SMTP 服务器设置仍限管理员。

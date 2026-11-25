@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button } from './ui'
-import { LIGHT, themeVars } from '../theme'
+import { LIGHT, PRESETS, themeVars } from '../theme'
 
 const FIELDS = [
   ['bg', '背景'],
@@ -23,14 +23,34 @@ function Preview({ palette }) {
   )
 }
 
-export default function ThemeEditor({ initial, onSave, onClose }) {
+export default function ThemeEditor({ activeKey, initial, onPickPreset, onSave, onClose }) {
   const [palette, setPalette] = useState(initial ?? { ...LIGHT })
   const set = (key, value) => setPalette((current) => ({ ...current, [key]: value }))
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal theme-dialog" role="dialog" aria-label="自定义主题" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title">自定义主题</div>
+      <div className="modal theme-dialog" role="dialog" aria-label="外观主题" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">外观主题</div>
+        <div className="theme-preset-grid">
+          {PRESETS.map((preset) => (
+            <button
+              key={preset.key}
+              type="button"
+              className={'theme-preset-chip' + (activeKey === preset.key ? ' on' : '')}
+              aria-pressed={activeKey === preset.key}
+              onClick={() => {
+                setPalette({ bg: preset.bg, fg: preset.fg, acc: preset.acc })
+                onPickPreset?.(preset.key)
+              }}
+            >
+              <span
+                className="theme-preset-dot"
+                style={{ background: `linear-gradient(135deg, ${preset.bg} 0 50%, ${preset.acc} 50% 100%)` }}
+              />
+              <span>{preset.name}</span>
+            </button>
+          ))}
+        </div>
         <div className="theme-colors">
           {FIELDS.map(([key, label]) => (
             <label className="color-field" key={key}>
@@ -45,10 +65,11 @@ export default function ThemeEditor({ initial, onSave, onClose }) {
         </div>
         <Preview palette={palette} />
         <div className="modal-actions">
-          <Button variant="ghost" onClick={onClose}>取消</Button>
-          <Button onClick={() => onSave(palette)}>保存</Button>
+          <Button variant="ghost" onClick={onClose}>关闭</Button>
+          <Button onClick={() => onSave(palette)}>保存自定义</Button>
         </div>
       </div>
     </div>
   )
 }
+
