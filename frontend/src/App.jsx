@@ -332,10 +332,19 @@ export default function App() {
   const shownEvents =
     events === null ? null : activeTab.types ? events.filter((e) => activeTab.types.includes(e.type)) : events
 
+  const vars = themeVars(palette)
+  useEffect(() => {
+    const isDark = vars['--fg-deep'] === palette.fg
+    document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+    document.documentElement.style.background = palette.bg
+    document.body.style.background = palette.bg
+    document.body.style.color = palette.fg
+  }, [palette.bg, palette.fg, vars])
+
   return (
     <div
       id="app"
-      style={themeVars(palette)}
+      style={vars}
       data-collapsed={collapsed ? '1' : '0'}
       data-rail={railOpen ? '1' : '0'}
       data-mobile-nav-hidden={mobileNavHidden ? '1' : '0'}
